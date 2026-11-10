@@ -1,0 +1,1421 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>ResQ AI – Emergency Response</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script src="config.js"></script>
+<script>
+tailwind.config = {
+  theme: { extend: {
+    colors: { bg:'var(--bg)', surface:'var(--surface)', surface2:'var(--surface2)', fg:'var(--fg)', muted:'var(--muted)', line:'var(--line)', navy:'var(--navy)', navyfg:'var(--navyfg)', red:'var(--red)', redsoft:'var(--redsoft)' },
+    fontFamily: { display:['"Barlow Semi Condensed"','"Arial Narrow"','sans-serif'], sans:['"IBM Plex Sans"','system-ui','sans-serif'], mono:['"IBM Plex Mono"','ui-monospace','monospace'] }
+  } }
+}
+</script>
+<style>
+/* Layout concept: dispatch-desk. Navy header band and sidebar rail, light work surface, red reserved for danger and the primary action. */
+:root{
+  --bg:#F2F5FA; --surface:#FFFFFF; --surface2:#E8EDF6; --fg:#0D1A35; --muted:#4F5E7B; --line:#D5DDEA;
+  --navy:#0A1A3A; --navy2:#13285A; --navyfg:#E8EFFF; --red:#D61F37; --redsoft:#FDE7EA; --focus:#2765F0;
+  --shadow:0 1px 2px rgba(10,26,58,.06),0 10px 24px -14px rgba(10,26,58,.28);
+  --c-low:#1BA35A; --c-medium:#E2A400; --c-high:#EE7A0C; --c-critical:#D61F37;
+  --sev-low-bg:#DCF5E5; --sev-low-fg:#0F6236; --sev-medium-bg:#FFF0B8; --sev-medium-fg:#6F5100;
+  --sev-high-bg:#FFE0BF; --sev-high-fg:#8E3F00; --sev-critical-bg:#D61F37; --sev-critical-fg:#FFFFFF;
+  --st-reported-bg:#E2E7F0; --st-reported-fg:#36435F; --st-assigned-bg:#FFF0B8; --st-assigned-fg:#6F5100;
+  --st-progress-bg:#D9E9FF; --st-progress-fg:#0F409A; --st-resolved-bg:#DCF5E5; --st-resolved-fg:#0F6236;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#060E20; --surface:#0E1A36; --surface2:#16264B; --fg:#E7EDFB; --muted:#9BA9C8; --line:#25375D;
+  --navy:#040A18; --navy2:#0C1B3F; --navyfg:#E8EFFF; --red:#FF4A63; --redsoft:#3B1220; --focus:#7AA2FF;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 24px -14px rgba(0,0,0,.7);
+  --c-low:#3DD282; --c-medium:#F2BE2B; --c-high:#FF9340; --c-critical:#FF4A63;
+  --sev-low-bg:#0F3A25; --sev-low-fg:#74EBA6; --sev-medium-bg:#3C3207; --sev-medium-fg:#FFD94F;
+  --sev-high-bg:#442208; --sev-high-fg:#FFAB5E; --sev-critical-bg:#E5243F; --sev-critical-fg:#FFFFFF;
+  --st-reported-bg:#27334F; --st-reported-fg:#C2CCE3; --st-assigned-bg:#3C3207; --st-assigned-fg:#FFD94F;
+  --st-progress-bg:#10305F; --st-progress-fg:#92C2FF; --st-resolved-bg:#0F3A25; --st-resolved-fg:#74EBA6;
+  color-scheme:dark; } }
+:root[data-theme="dark"]{
+  --bg:#060E20; --surface:#0E1A36; --surface2:#16264B; --fg:#E7EDFB; --muted:#9BA9C8; --line:#25375D;
+  --navy:#040A18; --navy2:#0C1B3F; --navyfg:#E8EFFF; --red:#FF4A63; --redsoft:#3B1220; --focus:#7AA2FF;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 24px -14px rgba(0,0,0,.7);
+  --c-low:#3DD282; --c-medium:#F2BE2B; --c-high:#FF9340; --c-critical:#FF4A63;
+  --sev-low-bg:#0F3A25; --sev-low-fg:#74EBA6; --sev-medium-bg:#3C3207; --sev-medium-fg:#FFD94F;
+  --sev-high-bg:#442208; --sev-high-fg:#FFAB5E; --sev-critical-bg:#E5243F; --sev-critical-fg:#FFFFFF;
+  --st-reported-bg:#27334F; --st-reported-fg:#C2CCE3; --st-assigned-bg:#3C3207; --st-assigned-fg:#FFD94F;
+  --st-progress-bg:#10305F; --st-progress-fg:#92C2FF; --st-resolved-bg:#0F3A25; --st-resolved-fg:#74EBA6;
+  color-scheme:dark;
+}
+body{background:var(--bg);color:var(--fg);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:16px;line-height:1.5}
+*{box-sizing:border-box}
+h1,h2,h3,.font-display{font-family:"Barlow Semi Condensed","Arial Narrow",sans-serif;letter-spacing:.005em}
+h1,h2,h3{text-wrap:balance}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+button{font-family:inherit;cursor:pointer}
+a{color:inherit;text-decoration:none}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:60;background:var(--navy)}
+.gutter{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.topbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:50;background:var(--navy);color:var(--navyfg);border-bottom:1px solid rgba(255,255,255,.08)}
+.topbar-in{height:64px;display:flex;align-items:center;justify-content:space-between;gap:12px;max-width:1240px;margin:0 auto}
+.shell{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr);gap:24px;padding-block:24px 112px}
+.sidebar{display:none}
+.bottomnav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:50;background:var(--navy);color:var(--navyfg);padding-bottom:env(safe-area-inset-bottom,0px);border-top:1px solid rgba(255,255,255,.1)}
+@media (min-width:900px){
+  .shell{grid-template-columns:230px minmax(0,1fr);padding-bottom:48px}
+  .sidebar{display:block}
+  .bottomnav{display:none}
+}
+.side-in{position:sticky;top:calc(env(safe-area-inset-top,0px) + 88px);background:var(--navy);color:var(--navyfg);border-radius:20px;padding:12px}
+.navlink{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:12px;font-weight:600;color:#C5D2F2;transition:background .15s,color .15s}
+.navlink:hover{background:rgba(255,255,255,.08);color:#fff}
+.navlink.on{background:var(--red);color:#fff}
+.bn{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 4px 9px;font-size:13px;font-weight:600;color:#B7C5E8;min-height:64px}
+.bn.on{color:#fff;box-shadow:inset 0 3px 0 var(--red)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:48px;padding:0 20px;border-radius:14px;font-weight:600;font-size:16px;border:1.5px solid transparent;transition:transform .12s,background .15s,box-shadow .15s,opacity .15s}
+.btn:active{transform:translateY(1px)}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.btn-red{background:var(--red);color:#fff;box-shadow:0 8px 20px -10px var(--red)}
+.btn-red:hover:not([disabled]){box-shadow:0 12px 26px -10px var(--red);filter:brightness(1.06)}
+.btn-ghost{background:var(--surface);color:var(--fg);border-color:var(--line)}
+.btn-ghost:hover:not([disabled]){background:var(--surface2)}
+.btn-navy{background:var(--navy2);color:#fff}
+.btn-navy:hover:not([disabled]){filter:brightness(1.15)}
+.btn-onnavy{background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.22)}
+.btn-onnavy:hover{background:rgba(255,255,255,.18)}
+.btn-lg{min-height:64px;font-size:19px;padding:0 28px;border-radius:16px}
+.field{width:100%;background:var(--surface);color:var(--fg);border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;font-size:16px;min-height:48px;transition:border-color .15s,box-shadow .15s}
+.field::placeholder{color:var(--muted);opacity:.8}
+.field:hover{border-color:var(--muted)}
+.field:focus{outline:none;border-color:var(--focus);box-shadow:0 0 0 3px color-mix(in srgb,var(--focus) 30%,transparent)}
+.field.bad{border-color:var(--red);background:color-mix(in srgb,var(--red) 6%,var(--surface))}
+.err{color:var(--red);font-size:14px;font-weight:500;margin-top:6px;display:flex;gap:6px;align-items:center}
+.label{display:block;font-weight:600;margin-bottom:6px}
+.hint{color:var(--muted);font-size:14px}
+.eyebrow{text-transform:uppercase;letter-spacing:.12em;font-size:12px;font-weight:600;color:var(--muted)}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:13px;font-weight:600;white-space:nowrap;line-height:1.5}
+.badge i{width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block}
+.sev-low{background:var(--sev-low-bg);color:var(--sev-low-fg)}
+.sev-medium{background:var(--sev-medium-bg);color:var(--sev-medium-fg)}
+.sev-high{background:var(--sev-high-bg);color:var(--sev-high-fg)}
+.sev-critical{background:var(--sev-critical-bg);color:var(--sev-critical-fg)}
+.st-reported{background:var(--st-reported-bg);color:var(--st-reported-fg)}
+.st-assigned{background:var(--st-assigned-bg);color:var(--st-assigned-fg)}
+.st-progress{background:var(--st-progress-bg);color:var(--st-progress-fg)}
+.st-resolved{background:var(--st-resolved-bg);color:var(--st-resolved-fg)}
+.pulse{animation:pulse 1.6s ease-out infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--c-critical) 60%,transparent)}70%{box-shadow:0 0 0 9px transparent}100%{box-shadow:0 0 0 0 transparent}}
+.hero{background:radial-gradient(760px 320px at 92% -12%,rgba(214,31,55,.5),transparent 62%),linear-gradient(165deg,var(--navy2),var(--navy));color:#fff;border-radius:26px;overflow:hidden;position:relative}
+.beacon{position:relative;width:64px;height:64px;border-radius:18px;background:var(--red);display:grid;place-items:center;color:#fff;flex:none}
+.beacon::after{content:"";position:absolute;inset:-6px;border-radius:24px;border:2px solid var(--red);opacity:.0;animation:ring 2.4s ease-out infinite}
+@keyframes ring{0%{transform:scale(.9);opacity:.8}100%{transform:scale(1.25);opacity:0}}
+.catcard{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:112px;padding:14px 10px;border-radius:16px;background:var(--surface);border:2px solid var(--line);font-weight:600;text-align:center;transition:transform .15s,border-color .15s,background .15s,box-shadow .15s}
+.catcard:hover{transform:translateY(-2px);border-color:var(--muted);box-shadow:var(--shadow)}
+.catcard .ic{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;background:var(--surface2);color:var(--fg);transition:background .15s,color .15s}
+.catcard[aria-checked="true"]{border-color:var(--red);background:var(--redsoft)}
+.catcard[aria-checked="true"] .ic{background:var(--red);color:#fff}
+.row{display:block;position:relative;padding:16px 18px 16px 22px;border-radius:16px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);transition:transform .15s,border-color .15s}
+.row:hover{transform:translateY(-2px);border-color:var(--muted)}
+.row::before{content:"";position:absolute;left:0;top:12px;bottom:12px;width:5px;border-radius:0 5px 5px 0;background:var(--stripe,var(--c-low))}
+.row.crit{border:2px solid var(--c-critical);padding:15px 17px 15px 21px;background:color-mix(in srgb,var(--c-critical) 5%,var(--surface))}
+.skel{border-radius:14px;background:linear-gradient(90deg,var(--surface2) 25%,color-mix(in srgb,var(--surface2) 60%,var(--surface)) 50%,var(--surface2) 75%);background-size:200% 100%;animation:shimmer 1.3s linear infinite}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.bar{height:14px;border-radius:7px;background:var(--surface2);overflow:hidden}
+.bar>span{display:block;height:100%;border-radius:7px;background:var(--navy2);transition:width .5s cubic-bezier(.2,.8,.2,1)}
+:root[data-theme="dark"] .bar>span{background:#5C86F0}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .bar>span{background:#5C86F0}}
+.bar>span.top{background:var(--red)}
+.toasts{position:fixed;z-index:80;left:0;right:0;bottom:calc(84px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px;align-items:stretch;pointer-events:none}
+@media (min-width:900px){.toasts{left:auto;bottom:24px;width:420px;padding-right:max(24px,env(safe-area-inset-right,0px))}}
+.toast{pointer-events:auto;display:flex;gap:10px;align-items:flex-start;padding:14px 16px;border-radius:14px;background:var(--navy);color:#fff;box-shadow:0 14px 34px -12px rgba(0,0,0,.5);border-left:6px solid #2FBF71;animation:slide .25s ease-out}
+.toast.err{border-left-color:var(--red)}
+@keyframes slide{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}
+.overlay{position:fixed;inset:0;z-index:90;background:rgba(3,8,20,.62);display:grid;place-items:center;padding:16px;backdrop-filter:blur(2px)}
+.dialog{width:100%;max-width:440px;background:var(--surface);color:var(--fg);border-radius:20px;padding:24px;box-shadow:0 30px 70px -20px rgba(0,0,0,.6);border:1px solid var(--line)}
+.dot-live{width:9px;height:9px;border-radius:50%;background:#2FBF71;display:inline-block}
+.scale{display:flex;height:12px;border-radius:6px;overflow:hidden;position:relative}
+.scale>i{display:block;height:100%}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
+.tnum{font-variant-numeric:tabular-nums}
+.filters{display:grid;gap:10px;grid-template-columns:minmax(0,1fr)}
+@media (min-width:640px){.filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (min-width:1100px){.filters{grid-template-columns:minmax(0,2fr) repeat(4,minmax(0,1fr))}}
+.grid-stats{display:grid;gap:12px;grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (min-width:1100px){.grid-stats{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.grid-cats{display:grid;gap:12px;grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (min-width:560px){.grid-cats{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.two{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
+@media (min-width:1000px){.two{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+.sosbtn{width:min(220px,60vw);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 30% 25%,#ff6b7f,var(--red) 55%,#9d1226);color:#fff;font:700 58px/1 "Barlow Semi Condensed",sans-serif;letter-spacing:.04em;border:8px solid color-mix(in srgb,var(--red) 25%,var(--surface));box-shadow:0 18px 40px -12px var(--red);animation:pulse 2s ease-out infinite}
+.sosbtn:active{transform:scale(.97)}
+.tmk{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:#fff;font:700 14px sans-serif;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.4)}
+.seg{display:inline-flex;border:1.5px solid var(--line);border-radius:12px;overflow:hidden}
+.seg button{padding:8px 14px;min-height:44px;background:var(--surface);color:var(--fg);font-weight:600}
+.seg button[aria-pressed=true]{background:var(--navy2);color:#fff}
+</style>
+
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
+<script type="text/babel">
+const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+// <severity>
+const CATEGORIES = [
+  { id: 'fire', label: 'Fire Emergency', short: 'Fire', icon: 'flame', base: 3 },
+  { id: 'road', label: 'Road Accident', short: 'Road Accident', icon: 'car', base: 2 },
+  { id: 'medical', label: 'Medical Emergency', short: 'Medical', icon: 'heart', base: 3 },
+  { id: 'flood', label: 'Flood', short: 'Flood', icon: 'waves', base: 3 },
+  { id: 'police', label: 'Police Assistance', short: 'Police', icon: 'shield', base: 2 },
+  { id: 'disaster', label: 'Natural Disaster', short: 'Natural Disaster', icon: 'mountain', base: 4 },
+  { id: 'collapse', label: 'Building Collapse', short: 'Building Collapse', icon: 'building', base: 4 },
+  { id: 'other', label: 'Other', short: 'Other', icon: 'dots', base: 1 },
+];
+const TA_KW = ['சிக்கி', 'மயக்கம்', 'வெடி', 'ரத்தம்', 'குழந்தை'];
+const KEYWORDS = ['trapped', 'unconscious', 'explosion', 'dead', 'fatal', 'spreading', 'bleeding', 'child'];
+
+function calcSeverity(category, people, description) {
+  const cat = CATEGORIES.find(c => c.id === category) || CATEGORIES[CATEGORIES.length - 1];
+  const n = Math.max(0, parseInt(people, 10) || 0);
+  const peopleAdd = n >= 25 ? 3 : n >= 10 ? 2 : n >= 3 ? 1 : 0;
+  const text = String(description || '').toLowerCase();
+  const found = KEYWORDS.filter(k => new RegExp('\\b' + k).test(text)).concat(TA_KW.filter(k => text.includes(k)));
+  const kwAdd = found.length ? 1 : 0;
+  const score = cat.base + peopleAdd + kwAdd;
+  const level = score >= 8 ? 'Critical' : score >= 6 ? 'High' : score >= 4 ? 'Medium' : 'Low';
+  const reasons = [
+    cat.label + ' base score: +' + cat.base,
+    n + (n === 1 ? ' person' : ' people') + ' affected: +' + peopleAdd,
+    found.length ? 'Urgent wording found (' + found.join(', ') + '): +1' : 'No urgent keywords in the description: +0',
+  ];
+  return { score, level, reasons, keywords: found };
+}
+// </severity>
+
+// <seeds>
+const SEEDS = [
+  { n: 1, title: 'Apartment block partially collapsed', description: 'Three-storey apartment block partially collapsed after heavy rain. Several residents are trapped under debris and neighbours report people calling for help.', category: 'collapse', location: 'Ganesh Nagar, Anna Salai, Chennai', people: 28, status: 'In Progress', mins: 18, contactName: 'Meenakshi R', contactPhone: '98400 11223' },
+  { n: 2, title: 'Chemical godown on fire', description: 'Thick black smoke and a loud blast heard from a chemical godown. Fire is spreading to the neighbouring shops and the lane is blocked.', category: 'fire', location: 'Plot 14, Industrial Estate Phase 2, Coimbatore', people: 12, status: 'Reported', mins: 7, contactName: 'Imran Sheikh', contactPhone: '99620 45871' },
+  { n: 3, title: 'Slab collapse at construction site', description: 'Roof slab of an under-construction shopping complex gave way during concrete pouring. Workers are trapped and rescue is waiting for a crane.', category: 'collapse', location: 'OMR Service Road, Sholinganallur, Chennai', people: 26, status: 'Reported', mins: 3, contactName: '', contactPhone: '' },
+  { n: 4, title: 'Pile-up near toll plaza', description: 'A truck and two cars collided near the toll plaza. The driver of one car is unconscious and fuel is leaking onto the road.', category: 'road', location: 'NH 44, Krishnagiri toll plaza', people: 5, status: 'Assigned', mins: 34, contactName: 'Arun Kumar', contactPhone: '90030 77412' },
+  { n: 5, title: 'Man collapsed on railway platform', description: 'Elderly man collapsed on platform 3 and is not breathing. A bystander is giving CPR. He appears unconscious.', category: 'medical', location: 'Platform 3, Madurai Junction', people: 1, status: 'Resolved', mins: 125, contactName: 'Station Master Office', contactPhone: '0452 233 0011' },
+  { n: 6, title: 'Colony waterlogged after overnight rain', description: 'Water has reached knee height across the colony. Families are moving to upper floors and two elderly residents need help leaving their homes.', category: 'flood', location: 'Velachery Main Road, Chennai', people: 40, status: 'Assigned', mins: 55, contactName: 'Residents Welfare Association', contactPhone: '' },
+  { n: 7, title: 'Fallen tree blocking street', description: 'Large neem tree fell across the road after strong winds. No injuries. Traffic is being diverted through the next lane.', category: 'other', location: 'Gandhi Street, Tiruchirappalli', people: 1, status: 'Resolved', mins: 190, contactName: '', contactPhone: '' },
+  { n: 8, title: 'Two-wheeler skid on flyover', description: 'Rider slipped on the wet flyover and has a minor leg injury. Ambulance has been requested and traffic is moving slowly.', category: 'road', location: 'Koyambedu Flyover, Chennai', people: 1, status: 'Resolved', mins: 300, contactName: 'Divya S', contactPhone: '97890 66310' },
+];
+// </seeds>
+
+const STATUSES = ['Reported', 'Assigned', 'In Progress', 'Resolved'];
+const SEV_RANK = { Low: 1, Medium: 2, High: 3, Critical: 4 };
+const stSlug = s => s === 'In Progress' ? 'progress' : s.toLowerCase();
+const catOf = id => CATEGORIES.find(c => c.id === id) || CATEGORIES[CATEGORIES.length - 1];
+const isActiveCritical = i => i.severity === 'Critical' && i.status !== 'Resolved';
+
+function genId() {
+  const d = new Date();
+  const ymd = String(d.getFullYear()).slice(2) + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+  const rnd = Math.random().toString(36).slice(2, 8).toUpperCase();
+  return 'RQ-' + ymd + '-' + rnd;
+}
+function makeIncident(p) {
+  const sev = p.override || calcSeverity(p.category, p.people, p.description);
+  return {
+    id: p.id, title: p.title, description: p.description, category: p.category, location: p.location,
+    people: parseInt(p.people, 10), contactName: p.contactName || '', contactPhone: p.contactPhone || '',
+    severity: sev.level, severityScore: sev.score, severityReasons: sev.reasons,
+    status: p.status || 'Reported', createdAt: p.createdAt, updatedAt: p.createdAt,
+    lat: p.lat ?? null, lng: p.lng ?? null, sos: !!p.sos, teamId: null, prioritySource: p.override ? 'SOS' : 'Rules',
+    history: [{ at: p.createdAt, status: p.status || 'Reported', by: 'reporter', note: 'Report created' }],
+  };
+}
+function buildSeeds() {
+  const now = Date.now();
+  return SEEDS.map(s => makeIncident({ ...s, id: 'RQ-261110-S00' + s.n, createdAt: now - s.mins * 60000 }));
+}
+function timeAgo(ms) {
+  const m = Math.floor((Date.now() - ms) / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return m + ' min ago';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + ' h ago';
+  return Math.floor(h / 24) + ' d ago';
+}
+const fmtDate = ms => new Date(ms).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+
+/* ---------- ResQ AI: config, i18n, geo, offline storage, store ---------- */
+const API = window.RESQ_API_BASE || '';
+let LANG = 'en';
+const TX = {
+  en: { home: 'Home', report: 'Report', map: 'Map', teams: 'Teams', desk: 'Desk', hero_h: 'Tell us what is happening. We rank it and route it.', whats: 'What is happening?',
+    sos_hint: 'Press SOS in an emergency. You get 5 seconds to cancel.', sos_count: 'Sending SOS in', cancel: 'Cancel SOS', call112: 'Call 112', voice_h: 'Voice or text assistant',
+    speak: 'Speak', listening: 'Listening…', analyze: 'Understand text', saved_local: 'Saved Locally', syncing: 'Syncing', confirmed: 'Server Confirmed', lang: 'தமிழ்' },
+  ta: { home: 'முகப்பு', report: 'புகார்', map: 'வரைபடம்', teams: 'குழுக்கள்', desk: 'மேசை', hero_h: 'என்ன நடக்கிறது என்று சொல்லுங்கள். நாங்கள் முன்னுரிமை அளிக்கிறோம்.', whats: 'என்ன நடக்கிறது?',
+    sos_hint: 'அவசரத்தில் SOS அழுத்தவும். ரத்து செய்ய 5 வினாடிகள் உண்டு.', sos_count: 'SOS அனுப்பப்படுகிறது', cancel: 'SOS ரத்து', call112: '112 அழைக்க', voice_h: 'குரல் / உரை உதவியாளர்',
+    speak: 'பேசுங்கள்', listening: 'கேட்கிறது…', analyze: 'உரையைப் புரிந்துகொள்', saved_local: 'சாதனத்தில் சேமிக்கப்பட்டது', syncing: 'ஒத்திசைக்கிறது', confirmed: 'சர்வர் உறுதிசெய்தது', lang: 'English' },
+};
+const t = k => (TX[LANG] && TX[LANG][k]) || TX.en[k] || k;
+const CAT_TA = { fire: 'தீ விபத்து', medical: 'மருத்துவ அவசரம்', road: 'சாலை விபத்து', flood: 'வெள்ளம்', police: 'காவல் உதவி', disaster: 'இயற்கைப் பேரிடர்', collapse: 'கட்டிட இடிபாடு', other: 'மற்றவை' };
+const catLabel = c => (LANG === 'ta' && CAT_TA[c.id]) || c.label;
+const TEAM_TYPES = { fire: 'Fire & Rescue', medical: 'Medical Team', ambulance: 'Ambulance', rescue: 'Disaster Rescue', police: 'Police Support' };
+const TEAM_LETTER = { fire: 'F', medical: 'M', ambulance: 'A', rescue: 'R', police: 'P' };
+const NEED = { fire: ['fire', 'rescue'], medical: ['ambulance', 'medical'], road: ['ambulance', 'police', 'medical'], flood: ['rescue'], police: ['police'], disaster: ['rescue', 'fire'], collapse: ['rescue', 'ambulance', 'fire'], other: ['police', 'ambulance'] };
+const SEVCOL = { Critical: '#D61F37', High: '#EE7A0C', Medium: '#E2A400', Low: '#1BA35A' };
+const TEAMCOL = { Available: '#1BA35A', Busy: '#EE7A0C', Offline: '#6B778F' };
+const DEMO_ACCOUNTS = [{ email: 'admin@demo.resq', password: 'Admin#Demo1', role: 'admin' }, { email: 'responder@demo.resq', password: 'Resp#Demo1', role: 'responder' }];
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// Sample place names -> approximate coordinates (used ONLY when no GPS was captured; always labelled approximate)
+const CITIES = { 'anna salai': [13.0604, 80.2496], sholinganallur: [12.901, 80.2279], koyambedu: [13.0694, 80.1948], velachery: [12.9815, 80.218], 'வேளச்சேரி': [12.9815, 80.218],
+  chennai: [13.0827, 80.2707], 'சென்னை': [13.0827, 80.2707], coimbatore: [11.0168, 76.9558], 'கோயம்புத்தூர்': [11.0168, 76.9558], 'கோவை': [11.0168, 76.9558],
+  madurai: [9.9252, 78.1198], 'மதுரை': [9.9252, 78.1198], tiruchirappalli: [10.7905, 78.7047], trichy: [10.7905, 78.7047], 'திருச்சி': [10.7905, 78.7047],
+  krishnagiri: [12.5186, 78.2137], 'கிருஷ்ணகிரி': [12.5186, 78.2137], salem: [11.6643, 78.146], 'சேலம்': [11.6643, 78.146] };
+const hash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) | 0; return Math.abs(h); };
+function geoGuess(text, seed) {
+  const s = String(text || '').toLowerCase();
+  for (const k in CITIES) if (s.includes(k)) { const h = hash(seed || s); return { lat: CITIES[k][0] + ((h % 100) - 50) / 5000, lng: CITIES[k][1] + (((h >> 3) % 100) - 50) / 5000, approx: true }; }
+  return null;
+}
+const pos = x => x.lat != null && x.lng != null ? { lat: x.lat, lng: x.lng, approx: false } : (x.location ? geoGuess(x.location, x.id) : null);
+const hav = (a, b) => { const r = Math.PI / 180, dLa = (b.lat - a.lat) * r, dLo = (b.lng - a.lng) * r; const h = Math.sin(dLa / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLo / 2) ** 2; return 12742 * Math.asin(Math.sqrt(h)); };
+const gpsPart = f => (f.lat != null && f.location.trim() === f.lat.toFixed(5) + ', ' + f.lng.toFixed(5)) ? { lat: f.lat, lng: f.lng } : { lat: null, lng: null };
+function recommend(inc, teams) {
+  const p = pos(inc), need = NEED[inc.category] || NEED.other;
+  return teams.filter(x => x.status === 'Available' && need.includes(x.type)).map(x => ({ ...x, km: p ? hav(p, x) : null }))
+    .sort((a, b) => a.km == null ? 1 : b.km == null ? -1 : a.km - b.km);
+}
+const DEMO_TEAMS = [
+  ['T1', 'Fire & Rescue – Egmore', 'fire', 'Available', 13.0732, 80.2609], ['T2', 'Fire & Rescue – Coimbatore South', 'fire', 'Busy', 10.9925, 76.9614],
+  ['T3', 'Medical Team – Anna Nagar', 'medical', 'Available', 13.085, 80.2101], ['T4', 'Medical Team – Madurai', 'medical', 'Available', 9.9252, 78.1198],
+  ['T5', 'Ambulance A – Adyar', 'ambulance', 'Available', 13.0067, 80.257], ['T6', 'Ambulance B – T Nagar', 'ambulance', 'Busy', 13.0418, 80.2341],
+  ['T7', 'Ambulance – RS Puram', 'ambulance', 'Available', 11.0096, 76.95], ['T8', 'Disaster Rescue – Chennai', 'rescue', 'Available', 13.05, 80.2121],
+  ['T9', 'Disaster Rescue – Trichy', 'rescue', 'Offline', 10.7905, 78.7047], ['T10', 'Police Support – Sholinganallur', 'police', 'Available', 12.901, 80.2279],
+  ['T11', 'Police Support – Krishnagiri', 'police', 'Available', 12.5186, 78.2137],
+].map(([id, name, type, status, lat, lng]) => ({ id, name, type, status, lat, lng, demo: true }));
+
+/* IndexedDB: incidents (with sync state) + kv. Falls back to no-ops if IndexedDB is unavailable. */
+const idb = (() => {
+  let p; const has = !!window.indexedDB;
+  const open = () => p || (p = new Promise((res, rej) => { const r = indexedDB.open('resq', 1); r.onupgradeneeded = () => { r.result.createObjectStore('incidents', { keyPath: 'id' }); r.result.createObjectStore('kv'); }; r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }));
+  const run = async (st, mode, fn) => { if (!has) return undefined; const db = await open(); return new Promise((res, rej) => { const tx = db.transaction(st, mode); const rq = fn(tx.objectStore(st)); tx.oncomplete = () => res(rq && rq.result); tx.onerror = () => rej(tx.error); }); };
+  return { all: async () => (await run('incidents', 'readonly', s => s.getAll())) || [], put: i => run('incidents', 'readwrite', s => s.put(i)), del: id => run('incidents', 'readwrite', s => s.delete(id)),
+    get: k => run('kv', 'readonly', s => s.get(k)), set: (k, v) => run('kv', 'readwrite', s => s.put(v, k)) };
+})();
+
+function useStore() {
+  const [items, setItems] = useState(null), [teams, setTeams] = useState([]), [mode, setMode] = useState('connecting'), [online, setOnline] = useState(navigator.onLine);
+  const [user, setUser] = useState(() => { try { return JSON.parse(sessionStorage.getItem('resq.user')); } catch (e) { return null; } });
+  const R = useRef({}); R.current = { mode, user, items, teams };
+  const lock = useRef(false);
+  const logout = useCallback(() => { try { sessionStorage.removeItem('resq.user'); } catch (e) {} setUser(null); }, []);
+  const api = useCallback(async (path, opt = {}) => {
+    const u = R.current.user, ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 8000);
+    try {
+      const r = await fetch(API + '/api' + path, { ...opt, signal: ctl.signal, headers: { 'Content-Type': 'application/json', ...(u && u.token ? { Authorization: 'Bearer ' + u.token } : {}) } });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { if (r.status === 401 && u) logout(); throw Object.assign(new Error(j.error || 'HTTP ' + r.status), { status: r.status }); }
+      return j;
+    } finally { clearTimeout(tm); }
+  }, []);
+  const putState = c => { setItems(p => [c, ...(p || []).filter(x => x.id !== c.id)]); return idb.put(c).catch(() => {}); };
+
+  const load = useCallback(async () => {
+    let local = []; try { local = await idb.all(); } catch (e) {}
+    if (R.current.mode === 'server' && R.current.user && navigator.onLine) {
+      try {
+        const [a, b] = await Promise.all([api('/incidents'), api('/teams')]);
+        const ids = new Set(a.incidents.map(x => x.id));
+        setItems([...local.filter(x => x.sync !== 'confirmed' && !ids.has(x.id)), ...a.incidents.map(x => ({ ...x, sync: 'confirmed' }))]); setTeams(b.teams); return;
+      } catch (e) {}
+    }
+    setItems(local);
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      let h = null;
+      try { const c = new AbortController(); setTimeout(() => c.abort(), 4000); const r = await fetch(API + '/api/health', { signal: c.signal }); if (r.ok) h = await r.json(); } catch (e) {}
+      const m = h && h.ok ? 'server' : 'demo'; R.current.mode = m; setMode(m);
+      if (m === 'demo') {
+        let local = []; try { local = await idb.all(); } catch (e) {}
+        if (!local.length && !(await idb.get('seeded'))) { local = buildSeeds().map(s => ({ ...s, demo: true, sync: 'local' })); for (const s of local) await idb.put(s); await idb.set('seeded', 1); }
+        setTeams((await idb.get('teams')) || DEMO_TEAMS); setItems(local);
+      } else { load(); sync(); }
+    })();
+    const on = () => { setOnline(true); sync(); }, off = () => setOnline(false);
+    window.addEventListener('online', on); window.addEventListener('offline', off);
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
+  }, []);
+  useEffect(() => { if (mode !== 'server') return; load(); const id = setInterval(load, 10000); return () => clearInterval(id); }, [mode, user && user.token]);
+
+  const sync = useCallback(async () => {
+    if (R.current.mode !== 'server' || !navigator.onLine || lock.current) return;
+    lock.current = true;
+    try {
+      const pend = (await idb.all()).filter(x => x.sync !== 'confirmed' && !x.demo);
+      for (const p of pend) {
+        setItems(prev => (prev || []).map(x => x.id === p.id ? { ...x, sync: 'syncing' } : x));
+        try { const j = await api('/incidents', { method: 'POST', body: JSON.stringify(p) }); await putState({ ...j.incident, sync: 'confirmed' }); }
+        catch (e) { setItems(prev => (prev || []).map(x => x.id === p.id ? { ...x, sync: 'local' } : x)); }
+      }
+    } finally { lock.current = false; }
+  }, []);
+
+  const prepare = useCallback(async inc => {
+    if (inc.sos) return inc;
+    if (R.current.mode === 'server' && navigator.onLine) {
+      try { const j = await api('/classify', { method: 'POST', body: JSON.stringify({ category: inc.category, people: inc.people, description: inc.description, location: inc.location }) });
+        if (j.level) return { ...inc, severity: j.level, severityScore: j.score, severityReasons: j.reasons, prioritySource: j.source }; } catch (e) {}
+    }
+    return { ...inc, prioritySource: 'Rules' };
+  }, []);
+  const create = useCallback(async inc => { await putState({ ...inc, sync: 'local' }); await sync(); }, [sync]);
+  const need = () => { if (!R.current.user) throw Object.assign(new Error('Sign in required'), { status: 401 }); };
+  const setStatus = useCallback(async (id, status) => {
+    need();
+    if (R.current.mode === 'server') { const j = await api('/incidents/' + id + '/status', { method: 'PATCH', body: JSON.stringify({ status }) }); await putState({ ...j.incident, sync: 'confirmed' }); return; }
+    const cur = R.current.items.find(x => x.id === id);
+    await putState({ ...cur, status, updatedAt: Date.now(), history: [...(cur.history || []), { at: Date.now(), status, by: R.current.user.email + ' (demo)', note: 'Status changed' }] });
+  }, []);
+  const setTeamStatus = useCallback(async (id, status) => {
+    need();
+    if (R.current.mode === 'server') { const j = await api('/teams/' + id + '/status', { method: 'PATCH', body: JSON.stringify({ status }) }); setTeams(p => p.map(x => x.id === id ? j.team : x)); return; }
+    const n = R.current.teams.map(x => x.id === id ? { ...x, status } : x); setTeams(n); await idb.set('teams', n);
+  }, []);
+  const assign = useCallback(async (id, teamId) => {
+    need();
+    if (R.current.mode === 'server') { const j = await api('/incidents/' + id + '/assign', { method: 'POST', body: JSON.stringify({ teamId }) }); await putState({ ...j.incident, sync: 'confirmed' }); setTeams(p => p.map(x => x.id === teamId ? { ...x, status: 'Busy' } : x)); return; }
+    const cur = R.current.items.find(x => x.id === id), tm = R.current.teams.find(x => x.id === teamId);
+    await putState({ ...cur, teamId, status: cur.status === 'Reported' ? 'Assigned' : cur.status, updatedAt: Date.now(), history: [...(cur.history || []), { at: Date.now(), status: 'Assigned', by: R.current.user.email + ' (demo)', note: 'DEMO assignment to ' + tm.name + '. No real team was contacted.' }] });
+    await setTeamStatus(teamId, 'Busy');
+  }, []);
+  const remove = useCallback(async id => { need(); if (R.current.mode === 'server') await api('/incidents/' + id, { method: 'DELETE' }); await idb.del(id).catch(() => {}); setItems(p => p.filter(x => x.id !== id)); }, []);
+  const login = useCallback(async (email, password) => {
+    let u;
+    if (R.current.mode === 'server') u = await api('/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+    else { const a = DEMO_ACCOUNTS.find(x => x.email === email.trim().toLowerCase() && x.password === password); if (!a) throw new Error('Email or password is incorrect'); u = { email: a.email, role: a.role, demo: true }; }
+    try { sessionStorage.setItem('resq.user', JSON.stringify(u)); } catch (e) {} R.current.user = u; setUser(u);
+  }, []);
+  const can = a => !!user && (a === 'delete' || a === 'assign' ? user.role === 'admin' : true);
+  return { items, teams, mode, online, user, slow: false, can, prepare, create, setStatus, setTeamStatus, assign, remove, login, logout, sync };
+}
+
+function useHashRoute() {
+  const read = () => (location.hash || '#home').slice(1) || 'home';
+  const [route, setRoute] = useState(read);
+  useEffect(() => {
+    const f = () => { setRoute(read()); window.scrollTo(0, 0); };
+    window.addEventListener('hashchange', f);
+    return () => window.removeEventListener('hashchange', f);
+  }, []);
+  return route;
+}
+
+/* ---------- icons (lucide paths) ---------- */
+const ICONS = {
+  flame: ['M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z'],
+  car: ['m21 8-2 2-1.5-3.7A2 2 0 0 0 15.646 5H8.4a2 2 0 0 0-1.903 1.257L5 10 3 8', 'M5 10h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2z', 'M7 14h.01', 'M17 14h.01', 'M5 18v2', 'M19 18v2'],
+  heart: ['M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z', 'M3.22 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27'],
+  waves: ['M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1', 'M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1', 'M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1'],
+  building: ['M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z', 'M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2', 'M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2', 'M10 6h4', 'M10 10h4', 'M10 14h4', 'M10 18h4'],
+  dots: ['M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z', 'M8 12h.01', 'M12 12h.01', 'M16 12h.01'],
+  pin: ['M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z', 'M12 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6z'],
+  siren: ['M7 18v-6a5 5 0 1 1 10 0v6', 'M5 21a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2z', 'M21 12h1', 'M18.5 4.5 18 5', 'M2 12h1', 'M12 2v1', 'm4.929 4.929.707.707'],
+  home: ['M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8', 'M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'],
+  dash: ['M3 3h7v9H3z', 'M14 3h7v5h-7z', 'M14 12h7v9h-7z', 'M3 16h7v5H3z'],
+  plus: ['M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z', 'M12 8v8', 'M8 12h8'],
+  search: ['m21 21-4.3-4.3', 'M11 3a8 8 0 1 0 0 16 8 8 0 0 0 0-16z'],
+  trash: ['M3 6h18', 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6', 'M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2', 'M10 11v6', 'M14 11v6'],
+  x: ['M18 6 6 18', 'm6 6 12 12'],
+  back: ['m12 19-7-7 7-7', 'M19 12H5'],
+  chev: ['m9 18 6-6-6-6'],
+  moon: ['M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z'],
+  sun: ['M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z', 'M12 2v2', 'M12 20v2', 'm4.93 4.93 1.41 1.41', 'm17.66 17.66 1.41 1.41', 'M2 12h2', 'M20 12h2', 'm6.34 17.66-1.41 1.41', 'm19.07 4.93-1.41 1.41'],
+  check: ['M22 11.08V12a10 10 0 1 1-5.93-9.14', 'm9 11 3 3L22 4'],
+  warn: ['m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3', 'M12 9v4', 'M12 17h.01'],
+  lock: ['M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z', 'M7 11V7a5 5 0 0 1 10 0v4'],
+  logout: ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'm16 17 5-5-5-5', 'M21 12H9'],
+  users: ['M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2', 'M9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z', 'M22 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'],
+  phone: ['M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z'],
+  clock: ['M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z', 'M12 6v6l4 2'],
+  locate: ['M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z', 'M22 12h-4', 'M6 12H2', 'M12 6V2', 'M12 22v-4', 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z'],
+  list: ['M8 6h13', 'M8 12h13', 'M8 18h13', 'M3 6h.01', 'M3 12h.01', 'M3 18h.01'],
+  shield: ['M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z'],
+  mountain: ['m8 3 4 8 5-5 5 15H2L8 3z'],
+  copy: ['M8 8h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2z', 'M4 16V4a2 2 0 0 1 2-2h12'],
+};
+function Icon({ name, size = 20, className = '', sw = 2 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true" style={{ flex: 'none' }}>
+      {(ICONS[name] || []).map((d, i) => <path key={i} d={d} />)}
+    </svg>
+  );
+}
+
+/* ---------- small shared pieces ---------- */
+function SevBadge({ level, pulse }) {
+  return <span className={'badge sev-' + level.toLowerCase() + (pulse ? ' pulse' : '')}><i />{level}</span>;
+}
+function StatusBadge({ status }) {
+  return <span className={'badge st-' + stSlug(status)}>{status}</span>;
+}
+function Skeletons({ n = 4, h = 92 }) {
+  return <div className="grid gap-3" aria-busy="true" aria-label="Loading incidents">{Array.from({ length: n }).map((_, i) => <div key={i} className="skel" style={{ height: h }} />)}</div>;
+}
+function Empty({ icon = 'list', title, body, children }) {
+  return (
+    <div className="card p-8 text-center grid justify-items-center gap-3">
+      <div className="w-14 h-14 rounded-2xl bg-surface2 grid place-items-center text-muted"><Icon name={icon} size={28} /></div>
+      <h3 className="text-2xl font-bold">{title}</h3>
+      <p className="text-muted max-w-md">{body}</p>
+      {children}
+    </div>
+  );
+}
+
+/* ---------- chrome ---------- */
+const NAV = [
+  { id: 'home', k: 'home', icon: 'home' }, { id: 'report', k: 'report', icon: 'siren' }, { id: 'map', k: 'map', icon: 'pin' },
+  { id: 'teams', k: 'teams', icon: 'users' }, { id: 'admin', k: 'desk', icon: 'dash' },
+];
+const navOn = (route, id) => id === 'home' ? route === 'home' : id === 'report' ? route.startsWith('report') : id === 'admin' ? (route === 'admin' || route.startsWith('incident-')) : route === id;
+
+function ThemeToggle() {
+  const [dark, setDark] = useState(() => {
+    const t = document.documentElement.getAttribute('data-theme');
+    return t ? t === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+  const flip = () => {
+    const next = !dark; setDark(next);
+    document.documentElement.setAttribute('data-theme', next ? 'dark' : 'light');
+    try { localStorage.setItem('resq.theme', next ? 'dark' : 'light'); } catch (e) {}
+  };
+  return (
+    <button onClick={flip} className="btn btn-onnavy" style={{ minHeight: 44, padding: '0 12px' }} aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'} title="Toggle dark mode">
+      <Icon name={dark ? 'sun' : 'moon'} size={20} />
+    </button>
+  );
+}
+function Header() {
+  return (
+    <header className="topbar gutter">
+      <div className="topbar-in">
+        <a href="#home" className="flex items-center gap-3" aria-label="ResQ home">
+          <span className="w-10 h-10 rounded-xl grid place-items-center text-white" style={{ background: 'var(--red)' }}><Icon name="siren" size={22} /></span>
+          <span className="leading-none">
+            <span className="font-display text-2xl font-bold block">ResQ</span>
+            <span className="hidden sm:block text-xs tracking-widest uppercase" style={{ color: '#9FB1DB' }}>Emergency Response</span>
+          </span>
+        </a>
+        <div className="flex items-center gap-2">
+          <a href="#report" className="btn btn-red" style={{ minHeight: 44, padding: '0 16px' }}><Icon name="siren" size={18} />Report<span className="hidden sm:inline">&nbsp;Emergency</span></a>
+          <LangToggle /><ThemeToggle />
+        </div>
+      </div>
+    </header>
+  );
+}
+function Sidebar({ route, admin, onLogout }) {
+  return (
+    <aside className="sidebar">
+      <nav className="side-in" aria-label="Main">
+        <div className="eyebrow px-3 pb-2 pt-1" style={{ color: '#7F93C2' }}>Navigate</div>
+        <div className="grid gap-1">
+          {NAV.map(n => <a key={n.id} href={'#' + n.id} className={'navlink' + (navOn(route, n.id) ? ' on' : '')}><Icon name={n.icon} size={20} />{t(n.k)}</a>)}
+        </div>
+        <div className="mt-4 p-3 rounded-xl text-sm" style={{ background: 'rgba(255,255,255,.07)', color: '#C5D2F2' }}>
+          <div className="font-semibold text-white mb-1">Life in danger?</div>
+          <a href="tel:112" className="underline font-bold text-white">Call 112</a> first, then file a report here. This app does not contact emergency services by itself.
+        </div>
+        {admin && <button onClick={onLogout} className="navlink w-full mt-2" style={{ background: 'transparent', border: 0 }}><Icon name="logout" size={20} />Sign out admin</button>}
+      </nav>
+    </aside>
+  );
+}
+function BottomNav({ route }) {
+  return (
+    <nav className="bottomnav gutter" aria-label="Main">
+      {NAV.map(n => <a key={n.id} href={'#' + n.id} className={'bn' + (navOn(route, n.id) ? ' on' : '')}><Icon name={n.icon} size={22} />{t(n.k)}</a>)}
+    </nav>
+  );
+}
+function Toasts({ list }) {
+  return (
+    <div className="toasts gutter" role="status" aria-live="polite">
+      {list.map(t => <div key={t.id} className={'toast' + (t.type === 'err' ? ' err' : '')}><Icon name={t.type === 'err' ? 'warn' : 'check'} size={20} />{t.msg}</div>)}
+    </div>
+  );
+}
+
+/* ---------- home ---------- */
+function Home({ store, toast }) {
+  const items = store.items;
+  const s = useMemo(() => {
+    const a = items || [];
+    return {
+      total: a.length,
+      active: a.filter(i => i.status !== 'Resolved').length,
+      crit: a.filter(isActiveCritical).length,
+      resolved: a.filter(i => i.status === 'Resolved').length,
+    };
+  }, [items]);
+  const ladder = [['Low', '3 or less', 30], ['Medium', '4 to 5', 50], ['High', '6 to 7', 72], ['Critical', '8 and above', 100]];
+  return (
+    <div className="grid gap-6">
+      <section className="hero p-6 md:p-10">
+        <div className="two" style={{ alignItems: 'center' }}>
+          <div className="grid gap-5 justify-items-start">
+            <div className="flex items-center gap-3">
+              <span className="beacon"><Icon name="siren" size={32} /></span>
+              <span className="eyebrow" style={{ color: '#A9BBE6' }}>ResQ incident desk</span>
+            </div>
+            <h1 className="font-display font-bold" style={{ fontSize: 'clamp(2.2rem,6vw,3.6rem)', lineHeight: 1.02 }}>{t('hero_h')}</h1>
+            <p style={{ color: '#C5D2F2', fontSize: 18, maxWidth: 520 }}>Report a fire, accident, flood or collapse in under a minute. Every report gets a severity level automatically so responders see the most urgent incidents first.</p>
+            <div className="flex flex-wrap gap-3 w-full">
+              <a href="#report" className="btn btn-red btn-lg"><Icon name="siren" size={24} />Report Emergency</a>
+              <a href="tel:112" className="btn btn-onnavy btn-lg" style={{ minHeight: 64 }}><Icon name="phone" size={22} />{t('call112')}</a>
+            </div>
+            <p className="text-sm" style={{ color: '#9FB1DB' }}>If someone is in immediate danger, call <b style={{ color: '#fff' }}>112</b> before filling in this form.</p>
+          </div>
+          <div className="rounded-2xl p-5 grid gap-3" style={{ background: 'rgba(255,255,255,.07)', border: '1px solid rgba(255,255,255,.14)' }}>
+            <div className="eyebrow" style={{ color: '#A9BBE6' }}>How severity is scored</div>
+            {ladder.map(([lvl, range, w]) => (
+              <div key={lvl} className="grid gap-1">
+                <div className="flex justify-between text-sm"><b className="text-white">{lvl}</b><span className="tnum" style={{ color: '#B7C5E8' }}>score {range}</span></div>
+                <div style={{ height: 10, borderRadius: 5, background: 'rgba(255,255,255,.12)' }}><div style={{ width: w + '%', height: '100%', borderRadius: 5, background: 'var(--c-' + lvl.toLowerCase() + ')' }} /></div>
+              </div>
+            ))}
+            <p className="text-sm" style={{ color: '#9FB1DB' }}>Score = category + people affected + urgent wording.</p>
+          </div>
+        </div>
+      </section>
+
+      <SOS store={store} toast={toast} />
+
+      <section aria-label="Live statistics" className="grid-stats">
+        {[['Reported so far', s.total, 'list'], ['Active now', s.active, 'clock'], ['Critical and open', s.crit, 'warn'], ['Resolved', s.resolved, 'check']].map(([l, v, ic]) => (
+          <div key={l} className="card p-4 flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl grid place-items-center flex-none" style={{ background: l === 'Critical and open' ? 'var(--redsoft)' : 'var(--surface2)', color: l === 'Critical and open' ? 'var(--red)' : 'var(--fg)' }}><Icon name={ic} size={22} /></div>
+            <div className="min-w-0">
+              <div className="font-display text-3xl font-bold leading-none tnum">{items ? v : '–'}</div>
+              <div className="text-sm text-muted mt-1">{l}</div>
+            </div>
+          </div>
+        ))}
+      </section>
+
+      <section className="grid gap-3">
+        <h2 className="text-2xl font-bold">{t('whats')}</h2>
+        <div className="grid-cats">
+          {CATEGORIES.map(c => (
+            <a key={c.id} href={'#report-' + c.id} className="catcard"><span className="ic"><Icon name={c.icon} size={26} /></span>{catLabel(c)}</a>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+/* ---------- report form ---------- */
+function Field({ id, label, optional, error, hint, children }) {
+  return (
+    <div>
+      <label htmlFor={id} className="label">{label}{optional && <span className="hint font-normal"> (optional)</span>}</label>
+      {children}
+      {hint && !error && <div className="hint mt-1">{hint}</div>}
+      {error && <div className="err" role="alert"><Icon name="warn" size={16} />{error}</div>}
+    </div>
+  );
+}
+
+function ReportForm({ store, toast, initialCat }) {
+  const [f, setF] = useState({ title: '', description: '', category: initialCat || '', location: '', people: '', contactName: '', contactPhone: '' });
+  const [errors, setErrors] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(null);
+  const [locating, setLocating] = useState(false);
+  const set = (k, v) => { setF(p => ({ ...p, [k]: v })); if (errors[k]) setErrors(e => ({ ...e, [k]: undefined })); };
+  const nPeople = parseInt(f.people, 10);
+  const preview = useMemo(() => (f.category && nPeople > 0) ? calcSeverity(f.category, nPeople, f.description) : null, [f.category, nPeople, f.description]);
+
+  function validate() {
+    const e = {};
+    if (f.title.trim().length < 4) e.title = 'Add a short title, at least 4 characters. Example: "Kitchen fire in apartment block".';
+    if (f.description.trim().length < 10) e.description = 'Describe what you can see, at least 10 characters. Mention anyone trapped, hurt or in danger.';
+    if (!f.category) e.category = 'Choose the type of emergency.';
+    if (f.location.trim().length < 3) e.location = 'Tell us where this is. A street, landmark or area name works.';
+    if (!(nPeople >= 1) || nPeople > 100000) e.people = 'Enter how many people are affected, 1 or more. Your best estimate is fine.';
+    if (f.contactPhone.trim() && !/^[0-9+()\-\s]{7,18}$/.test(f.contactPhone.trim())) e.contactPhone = 'This phone number looks incomplete. Use digits only, or leave it blank.';
+    return e;
+  }
+  async function submit(ev) {
+    ev.preventDefault();
+    const er = validate(); setErrors(er);
+    const keys = Object.keys(er);
+    if (keys.length) {
+      toast('Please check the highlighted fields.', 'err');
+      const el = document.getElementById(keys[0] === 'category' ? 'cat-group' : 'f-' + keys[0]);
+      if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); if (el.focus) el.focus({ preventScroll: true }); }
+      return;
+    }
+    setBusy(true);
+    try {
+      const inc = makeIncident({ id: genId(), title: f.title.trim(), description: f.description.trim(), category: f.category, location: f.location.trim(), people: nPeople, contactName: f.contactName.trim(), contactPhone: f.contactPhone.trim(), ...gpsPart(f), status: 'Reported', createdAt: Date.now() });
+      const inc2 = await store.prepare(inc); await store.create(inc2);
+      setDone(inc2); window.scrollTo(0, 0);
+      toast('Report ' + inc.id + ' saved.');
+    } catch (err) {
+      toast('Your report could not be saved. ' + (err && err.code === 'invalid_argument' ? 'This page needs contributor access to store reports.' : 'Check your connection and try again.'), 'err');
+    }
+    setBusy(false);
+  }
+  function useMyLocation() {
+    if (!navigator.geolocation) { toast('Location is not available on this device. Type the address or a landmark instead.', 'err'); return; }
+    setLocating(true);
+    let finished = false;
+    const stop = () => { finished = true; setLocating(false); };
+    const guard = setTimeout(() => { if (!finished) { stop(); toast('Location did not respond. Type the address or a landmark instead.', 'err'); } }, 9000);
+    try {
+      navigator.geolocation.getCurrentPosition(
+        p => { clearTimeout(guard); stop(); setF(x => ({ ...x, lat: p.coords.latitude, lng: p.coords.longitude, location: p.coords.latitude.toFixed(5) + ', ' + p.coords.longitude.toFixed(5) })); toast('Location added. Add a landmark if you can.'); },
+        () => { clearTimeout(guard); stop(); toast('Could not read your location here. Type the address or a landmark instead.', 'err'); },
+        { timeout: 8000, enableHighAccuracy: true }
+      );
+    } catch (e) { clearTimeout(guard); stop(); toast('Could not read your location here. Type the address or a landmark instead.', 'err'); }
+  }
+
+  if (done) {
+    const cat = catOf(done.category);
+    return (
+      <div className="card p-6 md:p-8 grid gap-6 max-w-3xl">
+        <div className="flex items-start gap-4">
+          <div className="w-14 h-14 rounded-2xl grid place-items-center flex-none" style={{ background: 'var(--sev-low-bg)', color: 'var(--sev-low-fg)' }}><Icon name="check" size={30} /></div>
+          <div>
+            <h1 className="text-3xl font-bold">Report recorded</h1>
+            <SyncNote id={done.id} store={store} />
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-2xl p-4" style={{ background: 'var(--surface2)' }}>
+            <div className="eyebrow">Report ID</div>
+            <div className="flex items-center gap-2 flex-wrap mt-1">
+              <span className="mono text-xl font-medium break-all">{done.id}</span>
+              <button className="btn btn-ghost" style={{ minHeight: 36, padding: '0 10px', fontSize: 14 }} onClick={() => { try { navigator.clipboard.writeText(done.id).then(() => toast('Report ID copied.')).catch(() => toast('Select the ID to copy it.', 'err')); } catch (e) { toast('Select the ID to copy it.', 'err'); } }}><Icon name="copy" size={16} />Copy</button>
+            </div>
+          </div>
+          <div className="rounded-2xl p-4" style={{ background: 'var(--surface2)' }}>
+            <div className="eyebrow">Assigned severity</div>
+            <div className="flex items-center gap-3 mt-1"><SevBadge level={done.severity} pulse={done.severity === 'Critical'} /><span className="text-muted tnum">score {done.severityScore}</span></div>
+          </div>
+        </div>
+        <div>
+          <h2 className="text-xl font-bold mb-2">Why this severity</h2>
+          <ul className="grid gap-1.5">{done.severityReasons.map((r, i) => <li key={i} className="flex gap-2"><Icon name="chev" size={18} className="text-muted mt-1" />{r}</li>)}</ul>
+        </div>
+        <div className="rounded-2xl p-4 text-sm" style={{ background: 'var(--surface2)' }}>
+          <b>{done.title}</b> · {cat.label} · {done.location}
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <button className="btn btn-red" onClick={() => { setDone(null); setF({ title: '', description: '', category: '', location: '', people: '', contactName: '', contactPhone: '' }); }}><Icon name="siren" size={20} />Report another</button>
+          <a href="#home" className="btn btn-ghost">Back to home</a>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={submit} noValidate className="grid gap-6 max-w-3xl">
+      <div>
+        <h1 className="text-4xl font-bold">Report an emergency</h1>
+        <p className="text-muted mt-1 text-lg">Fill in what you know. Severity is calculated for you.</p>
+      </div>
+      <VoiceAssistant onParsed={p => setF(x => ({ ...x, ...p }))} />
+
+      <section className="card p-5 md:p-6 grid gap-5">
+        <h2 className="text-2xl font-bold flex items-center gap-2"><span className="eyebrow" style={{ fontSize: 13 }}>Step 1</span>What happened</h2>
+        <div id="cat-group" tabIndex={-1} role="radiogroup" aria-label="Emergency category" style={{ outline: 'none' }}>
+          <div className="label">Type of emergency</div>
+          <div className="grid-cats">
+            {CATEGORIES.map(c => (
+              <button type="button" key={c.id} role="radio" aria-checked={f.category === c.id} className="catcard" onClick={() => set('category', c.id)}>
+                <span className="ic"><Icon name={c.icon} size={26} /></span>{catLabel(c)}
+              </button>
+            ))}
+          </div>
+          {errors.category && <div className="err" role="alert"><Icon name="warn" size={16} />{errors.category}</div>}
+        </div>
+        <Field id="f-title" label="Incident title" error={errors.title}>
+          <input id="f-title" className={'field' + (errors.title ? ' bad' : '')} value={f.title} onChange={e => set('title', e.target.value)} placeholder="Short summary, for example: Car overturned on bridge" maxLength={120} autoComplete="off" />
+        </Field>
+        <Field id="f-description" label="Description" error={errors.description} hint="Mention anyone trapped, hurt or unconscious. These details raise the severity.">
+          <textarea id="f-description" className={'field' + (errors.description ? ' bad' : '')} rows={5} value={f.description} onChange={e => set('description', e.target.value)} placeholder="What do you see? How many people need help? Is it spreading?" maxLength={1200} />
+        </Field>
+      </section>
+
+      <section className="card p-5 md:p-6 grid gap-5">
+        <h2 className="text-2xl font-bold flex items-center gap-2"><span className="eyebrow" style={{ fontSize: 13 }}>Step 2</span>Where and who</h2>
+        <Field id="f-location" label="Location" error={errors.location}>
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <input id="f-location" className={'field' + (errors.location ? ' bad' : '')} value={f.location} onChange={e => set('location', e.target.value)} placeholder="Street, landmark, area, city" autoComplete="street-address" />
+            <button type="button" className="btn btn-ghost" onClick={useMyLocation} disabled={locating}><Icon name="locate" size={20} />{locating ? 'Locating…' : 'Use my current location'}</button>
+          </div>
+        </Field>
+        <Field id="f-people" label="Number of people affected" error={errors.people} hint="Your best estimate is fine.">
+          <input id="f-people" type="number" inputMode="numeric" min="1" className={'field' + (errors.people ? ' bad' : '')} style={{ maxWidth: 220 }} value={f.people} onChange={e => set('people', e.target.value)} placeholder="e.g. 3" />
+        </Field>
+      </section>
+
+      <section className="card p-5 md:p-6 grid gap-5">
+        <h2 className="text-2xl font-bold flex items-center gap-2"><span className="eyebrow" style={{ fontSize: 13 }}>Step 3</span>Contact <span className="hint font-normal">(optional)</span></h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field id="f-contactName" label="Your name" optional><input id="f-contactName" className="field" value={f.contactName} onChange={e => set('contactName', e.target.value)} autoComplete="name" /></Field>
+          <Field id="f-contactPhone" label="Phone number" optional error={errors.contactPhone}><input id="f-contactPhone" type="tel" className={'field' + (errors.contactPhone ? ' bad' : '')} value={f.contactPhone} onChange={e => set('contactPhone', e.target.value)} autoComplete="tel" /></Field>
+        </div>
+      </section>
+
+      <section className="card p-5 grid gap-3" aria-live="polite">
+        <div className="eyebrow">Severity preview</div>
+        {preview ? (
+          <div className="flex items-center gap-3 flex-wrap">
+            <SevBadge level={preview.level} pulse={preview.level === 'Critical'} />
+            <span className="text-muted tnum">score {preview.score}</span>
+            <span className="text-muted text-sm">Updates as you type. The final level is set when you submit.</span>
+          </div>
+        ) : <p className="text-muted">Choose a type and the number of people to see the severity.</p>}
+      </section>
+
+      <button type="submit" className="btn btn-red btn-lg w-full sm:w-auto sm:justify-self-start" disabled={busy}>
+        <Icon name="siren" size={24} />{busy ? 'Sending report…' : 'Submit emergency report'}
+      </button>
+    </form>
+  );
+}
+
+/* ---------- admin ---------- */
+function StatCard({ label, value, sub, icon, tone }) {
+  const crit = tone === 'crit';
+  return (
+    <div className="card p-4 md:p-5" style={crit ? { borderColor: 'var(--c-critical)', borderWidth: 2 } : null}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="eyebrow">{label}</div>
+        <div className="w-9 h-9 rounded-xl grid place-items-center" style={{ background: crit ? 'var(--redsoft)' : 'var(--surface2)', color: crit ? 'var(--red)' : 'var(--fg)' }}><Icon name={icon} size={19} /></div>
+      </div>
+      <div className="font-display font-bold tnum mt-2" style={{ fontSize: 44, lineHeight: 1, color: crit ? 'var(--red)' : 'var(--fg)' }}>{value}</div>
+      <div className="text-sm text-muted mt-1">{sub}</div>
+    </div>
+  );
+}
+
+function IncidentRow({ i }) {
+  const crit = isActiveCritical(i);
+  const cat = catOf(i.category);
+  return (
+    <a href={'#incident-' + i.id} className={'row' + (crit ? ' crit' : '')} style={{ '--stripe': 'var(--c-' + i.severity.toLowerCase() + ')' }}>
+      <div className="flex items-center gap-2 flex-wrap">
+        <SevBadge level={i.severity} pulse={crit} />
+        <StatusBadge status={i.status} />
+        <span className="inline-flex items-center gap-1.5 text-sm text-muted"><Icon name={cat.icon} size={16} />{cat.short}</span>
+        {i.demo && <span className="badge st-reported">DEMO</span>}{i.sync && i.sync !== 'confirmed' && <span className="badge st-assigned">{i.sync === 'syncing' ? t('syncing') : t('saved_local')}</span>}<span className="ml-auto mono text-xs text-muted hidden sm:inline">{i.id}</span>
+      </div>
+      <div className="flex items-start gap-3 mt-2">
+        <div className="min-w-0 flex-1">
+          <h3 className="text-xl font-bold leading-snug" style={{ overflowWrap: 'anywhere' }}>{i.title}</h3>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted mt-1">
+            <span className="inline-flex items-center gap-1.5 min-w-0"><Icon name="pin" size={15} /><span style={{ overflowWrap: 'anywhere' }}>{i.location}</span></span>
+            <span className="inline-flex items-center gap-1.5 tnum"><Icon name="users" size={15} />{i.people} affected</span>
+            <span className="inline-flex items-center gap-1.5"><Icon name="clock" size={15} />{timeAgo(i.createdAt)}</span>
+          </div>
+        </div>
+        <Icon name="chev" size={22} className="text-muted mt-1" />
+      </div>
+    </a>
+  );
+}
+
+function Admin({ store }) {
+  const items = store.items;
+  const [q, setQ] = useState('');
+  const [cat, setCat] = useState('all');
+  const [sev, setSev] = useState('all');
+  const [st, setSt] = useState('all');
+  const [sort, setSort] = useState('newest');
+
+  const stats = useMemo(() => {
+    const a = items || [];
+    const byCat = CATEGORIES.map(c => ({ ...c, n: a.filter(i => i.category === c.id).length }));
+    return {
+      total: a.length,
+      crit: a.filter(i => i.severity === 'Critical').length,
+      critOpen: a.filter(isActiveCritical).length,
+      pending: a.filter(i => i.status === 'Reported' || i.status === 'Assigned').length,
+      resolved: a.filter(i => i.status === 'Resolved').length,
+      byCat, max: Math.max(1, ...byCat.map(c => c.n)),
+    };
+  }, [items]);
+
+  const list = useMemo(() => {
+    const a = (items || []).filter(i => {
+      if (cat !== 'all' && i.category !== cat) return false;
+      if (sev !== 'all' && i.severity !== sev) return false;
+      if (st !== 'all' && i.status !== st) return false;
+      if (q.trim()) {
+        const hay = (i.title + ' ' + i.description + ' ' + i.location + ' ' + i.id).toLowerCase();
+        if (!hay.includes(q.trim().toLowerCase())) return false;
+      }
+      return true;
+    });
+    return a.sort((x, y) => {
+      const cx = isActiveCritical(x) ? 1 : 0, cy = isActiveCritical(y) ? 1 : 0;
+      if (cx !== cy) return cy - cx;
+      if (sort === 'severity') { const d = SEV_RANK[y.severity] - SEV_RANK[x.severity]; if (d) return d; }
+      return y.createdAt - x.createdAt;
+    });
+  }, [items, q, cat, sev, st, sort]);
+  const filtered = q || cat !== 'all' || sev !== 'all' || st !== 'all';
+  const clear = () => { setQ(''); setCat('all'); setSev('all'); setSt('all'); };
+
+  return (
+    <div className="grid gap-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-4xl font-bold">Incident desk</h1>
+          <p className="text-muted flex items-center gap-2 mt-1">
+            {store.mode === 'server' ? <><span className="dot-live" />Server connected. Updates refresh every 10 seconds.</> : store.mode === 'demo' ? 'DEMO MODE: data is saved in this browser only and is not sent to any emergency service.' : 'Connecting…'}
+          </p>
+        </div>
+        <a href="#report" className="btn btn-ghost"><Icon name="plus" size={20} />Add a report</a>
+      </div>
+      {store.slow && <div className="card p-3 text-sm flex items-center gap-2" style={{ borderColor: 'var(--c-medium)' }} role="status"><Icon name="warn" size={18} />Saved reports are taking longer than usual to load. What you see may be out of date.</div>}
+
+      <section className="grid-stats" aria-label="Summary">
+        <StatCard label="Total reported" value={items ? stats.total : '–'} sub="All incidents" icon="list" />
+        <StatCard label="Critical" value={items ? stats.crit : '–'} sub={items ? stats.critOpen + ' still open' : ''} icon="warn" tone="crit" />
+        <StatCard label="Pending" value={items ? stats.pending : '–'} sub="Reported + Pending" icon="clock" />
+        <StatCard label="Resolved" value={items ? stats.resolved : '–'} sub="Closed out" icon="check" />
+      </section>
+
+      <section className="card p-5 grid gap-4" aria-label="Incidents by category">
+        <div className="flex items-baseline justify-between gap-2"><h2 className="text-2xl font-bold">Incidents by category</h2><span className="text-muted text-sm tnum">{stats.total} total</span></div>
+        <div className="grid gap-3">
+          {stats.byCat.map(c => (
+            <div key={c.id} className="grid items-center gap-3" style={{ gridTemplateColumns: 'minmax(120px,170px) minmax(0,1fr) 28px' }}>
+              <div className="flex items-center gap-2 text-sm font-semibold min-w-0"><Icon name={c.icon} size={18} /><span className="truncate">{c.short}</span></div>
+              <div className="bar" role="img" aria-label={c.short + ': ' + c.n}><span className={c.n === stats.max && c.n > 0 ? 'top' : ''} style={{ width: (c.n / stats.max * 100) + '%' }} /></div>
+              <div className="tnum font-bold text-right">{c.n}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <Analytics items={items} teams={store.teams} mode={store.mode} />
+      <section className="grid gap-3" aria-label="Incident list">
+        <div className="filters">
+          <div className="relative">
+            <Icon name="search" size={18} className="absolute text-muted" style={{ left: 14, top: 15 }} />
+            <input id="f-search" className="field" style={{ paddingLeft: 42 }} placeholder="Search title, place or ID" value={q} onChange={e => setQ(e.target.value)} aria-label="Search incidents" />
+          </div>
+          <select className="field" value={cat} onChange={e => setCat(e.target.value)} aria-label="Filter by category"><option value="all">All categories</option>{CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select>
+          <select className="field" value={sev} onChange={e => setSev(e.target.value)} aria-label="Filter by severity"><option value="all">All severities</option>{['Critical', 'High', 'Medium', 'Low'].map(s => <option key={s}>{s}</option>)}</select>
+          <select className="field" value={st} onChange={e => setSt(e.target.value)} aria-label="Filter by status"><option value="all">All statuses</option>{STATUSES.map(s => <option key={s}>{s}</option>)}</select>
+          <select className="field" value={sort} onChange={e => setSort(e.target.value)} aria-label="Sort"><option value="newest">Sort: Newest</option><option value="severity">Sort: Severity</option></select>
+        </div>
+        <div className="flex items-center justify-between text-sm text-muted">
+          <span className="tnum">Showing {list.length} of {stats.total}. Open critical incidents stay at the top.</span>
+          {filtered && <button className="underline font-semibold" onClick={clear} style={{ color: 'var(--fg)' }}>Clear filters</button>}
+        </div>
+        {!items ? <Skeletons n={4} /> : list.length === 0 ? (
+          filtered
+            ? <Empty icon="search" title="No incidents match" body="Try a different search or clear the filters."><button className="btn btn-ghost" onClick={clear}>Clear filters</button></Empty>
+            : <Empty icon="check" title="No incidents yet" body="New reports appear here the moment they are submitted."><a href="#report" className="btn btn-red">Report Emergency</a></Empty>
+        ) : <div className="grid gap-3">{list.map(i => <IncidentRow key={i.id} i={i} />)}</div>}
+      </section>
+    </div>
+  );
+}
+
+/* ---------- incident details ---------- */
+function Detail({ id, store, toast, go }) {
+  const inc = store.items ? store.items.find(i => i.id === id) : null;
+  const [draft, setDraft] = useState('Reported');
+  const [saving, setSaving] = useState(false);
+  const [confirm, setConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  useEffect(() => { if (inc) setDraft(inc.status); }, [inc && inc.status]);
+  useEffect(() => {
+    if (!confirm) return;
+    const k = e => { if (e.key === 'Escape') setConfirm(false); };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, [confirm]);
+
+  if (!store.items) return <div className="grid gap-4"><div className="skel" style={{ height: 120 }} /><div className="skel" style={{ height: 260 }} /></div>;
+  if (!inc) return (
+    <Empty icon="search" title="Incident not found" body="It may have been deleted, or the link is wrong.">
+      <a href="#admin" className="btn btn-ghost"><Icon name="back" size={18} />Back to dashboard</a>
+    </Empty>
+  );
+
+  const crit = isActiveCritical(inc);
+  const cat = catOf(inc.category);
+  const reasons = inc.severityReasons || calcSeverity(inc.category, inc.people, inc.description).reasons;
+  const score = inc.severityScore != null ? inc.severityScore : calcSeverity(inc.category, inc.people, inc.description).score;
+
+  async function save() {
+    setSaving(true);
+    try { await store.setStatus(inc.id, draft); toast('Status updated to ' + draft + '.'); }
+    catch (e) { toast('Status could not be updated. Try again.', 'err'); }
+    setSaving(false);
+  }
+  async function del() {
+    setDeleting(true);
+    try { await store.remove(inc.id); toast('Incident ' + inc.id + ' deleted.'); setConfirm(false); location.hash = 'admin'; }
+    catch (e) { toast('Incident could not be deleted. Try again.', 'err'); setDeleting(false); }
+  }
+
+  return (
+    <div className="grid gap-5">
+      <a href="#admin" className="inline-flex items-center gap-2 font-semibold text-muted hover:text-fg" style={{ justifySelf: 'start' }}><Icon name="back" size={18} />All incidents</a>
+
+      <section className="card p-5 md:p-6 grid gap-3" style={crit ? { borderColor: 'var(--c-critical)', borderWidth: 2 } : null}>
+        {crit && <div className="flex items-center gap-2 font-bold" style={{ color: 'var(--red)' }}><Icon name="warn" size={20} />Critical and still open. Respond first.</div>}
+        <div className="flex items-center gap-2 flex-wrap">
+          <SevBadge level={inc.severity} pulse={crit} /><StatusBadge status={inc.status} />
+          <span className="mono text-sm text-muted">{inc.id}</span>
+        </div>
+        <h1 className="text-4xl font-bold leading-tight" style={{ overflowWrap: 'anywhere' }}>{inc.title}</h1>
+        <p className="text-muted text-sm">Reported {fmtDate(inc.createdAt)} · {timeAgo(inc.createdAt)}{inc.updatedAt && inc.updatedAt !== inc.createdAt ? ' · updated ' + timeAgo(inc.updatedAt) : ''}</p>
+      </section>
+
+      <div className="two">
+        <div className="grid gap-5 content-start min-w-0">
+          <section className="card p-5 grid gap-3">
+            <h2 className="text-2xl font-bold">Description</h2>
+            <p style={{ overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>{inc.description}</p>
+          </section>
+          <section className="card p-5 grid gap-4">
+            <h2 className="text-2xl font-bold">Details</h2>
+            <dl className="grid gap-4 sm:grid-cols-2">
+              {[
+                ['Category', <span className="inline-flex items-center gap-2"><Icon name={cat.icon} size={18} />{cat.label}</span>],
+                ['People affected', <span className="tnum">{inc.people}</span>],
+                ['Location', <span style={{ overflowWrap: 'anywhere' }}>{inc.location}</span>],
+                ['Contact', inc.contactName || inc.contactPhone ? <span style={{ overflowWrap: 'anywhere' }}>{inc.contactName}{inc.contactName && inc.contactPhone ? ' · ' : ''}<span className="mono">{inc.contactPhone}</span></span> : <span className="text-muted">Not provided</span>],
+              ].map(([k, v]) => <div key={k} className="min-w-0"><dt className="eyebrow">{k}</dt><dd className="mt-1 font-medium">{v}</dd></div>)}
+            </dl>
+          </section>
+          <section className="card p-5 grid gap-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <h2 className="text-2xl font-bold">Severity reason <span className="hint font-normal">· {inc.prioritySource === 'AI' ? 'AI-assisted' : inc.prioritySource === 'SOS' ? 'SOS rule' : 'rule-based'}</span></h2>
+              <div className="flex items-center gap-2"><span className="text-muted tnum">Total score <b style={{ color: 'var(--fg)', fontSize: 20 }}>{score}</b></span><SevBadge level={inc.severity} /></div>
+            </div>
+            <ul className="grid gap-2">{reasons.map((r, i) => <li key={i} className="flex gap-2"><Icon name="chev" size={18} className="text-muted mt-1" />{r}</li>)}</ul>
+            <div>
+              <div className="scale" role="img" aria-label={'Score ' + score + ' of 10'}>
+                <i style={{ width: '30%', background: 'var(--c-low)' }} /><i style={{ width: '20%', background: 'var(--c-medium)' }} /><i style={{ width: '20%', background: 'var(--c-high)' }} /><i style={{ width: '30%', background: 'var(--c-critical)' }} />
+              </div>
+              <div style={{ position: 'relative', height: 14 }}>
+                <div style={{ position: 'absolute', left: 'calc(' + (Math.min(score, 10) / 10 * 100) + '% - 6px)', top: 2, width: 0, height: 0, borderLeft: '6px solid transparent', borderRight: '6px solid transparent', borderBottom: '9px solid var(--fg)' }} />
+              </div>
+              <div className="flex text-xs text-muted tnum" style={{ marginTop: 2 }}>
+                <span style={{ width: '30%' }}>Low ≤3</span><span style={{ width: '20%' }}>Medium 4–5</span><span style={{ width: '20%' }}>High 6–7</span><span style={{ width: '30%', textAlign: 'right' }}>Critical 8+</span>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div className="grid gap-5 content-start min-w-0">
+          <section className="card p-5 grid gap-4">
+            <h2 className="text-2xl font-bold">Update status</h2>
+            <div>
+              <label htmlFor="f-status" className="label">Status</label>
+              <select id="f-status" className="field" value={draft} onChange={e => setDraft(e.target.value)}>{STATUSES.map(s => <option key={s}>{s}</option>)}</select>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted">Current: <StatusBadge status={inc.status} /></div>
+            <button className="btn btn-navy" onClick={save} disabled={saving || draft === inc.status || !store.can('update')}>{saving ? 'Saving…' : 'Update Status'}</button>
+          </section>
+          <section className="card p-5 grid gap-3" style={{ borderColor: 'color-mix(in srgb,var(--red) 40%,var(--line))' }}>
+            <h2 className="text-2xl font-bold">Delete report</h2>
+            <p className="text-muted text-sm">Use this for test or duplicate reports. It cannot be undone.</p>
+            <button className="btn btn-ghost" style={{ color: 'var(--red)', borderColor: 'var(--red)' }} onClick={() => store.can('delete') ? setConfirm(true) : toast('Only admins can delete incidents.', 'err')}><Icon name="trash" size={20} />Delete</button>
+          </section>
+        </div>
+      </div>
+
+      <IncidentOps inc={inc} store={store} toast={toast} />
+
+      {confirm && (
+        <div className="overlay" onClick={() => !deleting && setConfirm(false)}>
+          <div className="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dlg-t" aria-describedby="dlg-d" onClick={e => e.stopPropagation()}>
+            <div className="w-12 h-12 rounded-2xl grid place-items-center mb-3" style={{ background: 'var(--redsoft)', color: 'var(--red)' }}><Icon name="trash" size={24} /></div>
+            <h2 id="dlg-t" className="text-2xl font-bold">Delete this incident?</h2>
+            <p id="dlg-d" className="text-muted mt-1" style={{ overflowWrap: 'anywhere' }}><b style={{ color: 'var(--fg)' }}>{inc.title}</b> ({inc.id}) will be removed for everyone.</p>
+            <div className="flex gap-3 mt-5 flex-wrap">
+              <button className="btn btn-ghost flex-1" autoFocus onClick={() => setConfirm(false)} disabled={deleting}>Cancel</button>
+              <button className="btn btn-red flex-1" onClick={del} disabled={deleting}>{deleting ? 'Deleting…' : 'Delete incident'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------- ResQ AI components ---------- */
+const TS = { Available: 'sev-low', Busy: 'sev-high', Offline: 'st-reported' };
+function SyncBadge({ sync, demo }) {
+  const s = sync || 'local';
+  const l = s === 'confirmed' ? t('confirmed') : s === 'syncing' ? t('syncing') : (demo ? t('saved_local') + ' (DEMO)' : t('saved_local'));
+  return <span className={'badge ' + (s === 'confirmed' ? 'st-resolved' : s === 'syncing' ? 'st-progress' : 'st-assigned')}><i />{l}</span>;
+}
+function SyncNote({ id, store }) {
+  const it = (store.items || []).find(i => i.id === id), s = it && it.sync, demo = store.mode === 'demo';
+  return (
+    <div className="grid gap-2" style={{ marginTop: 6 }}>
+      <div><SyncBadge sync={s} demo={demo} /></div>
+      <p className="text-muted">{s === 'confirmed' ? 'Stored on the server. Staff can see it on the incident desk. This does not mean a team has been dispatched.'
+        : demo ? 'DEMO MODE: saved in this browser only. It has NOT reached any responder. Call 112 for a real emergency.'
+        : 'Saved on this device. It uploads automatically when you are online. It has NOT reached responders yet. Call 112 if urgent.'}</p>
+    </div>
+  );
+}
+function DemoBanner({ mode, online }) {
+  if (mode === 'connecting' || (mode === 'server' && online)) return null;
+  return (
+    <div className="gutter" role="status"><div className="sev-medium text-sm font-semibold" style={{ maxWidth: 1240, margin: '10px auto 0', padding: '10px 14px', borderRadius: 12 }}>
+      {!online && <div>You are offline. Reports are saved on this device and sync when the connection returns. They have not reached responders.</div>}
+      {mode === 'demo' && <div>DEMO MODE: no backend connected. Sample data is labelled DEMO. Nothing is sent to emergency services. For a real emergency call 112.</div>}
+    </div></div>
+  );
+}
+function LangToggle() {
+  return <button className="btn btn-onnavy" style={{ minHeight: 44, padding: '0 12px' }} onClick={() => window.dispatchEvent(new Event('resq-lang'))} aria-label="Switch language / மொழி மாற்று">{t('lang')}</button>;
+}
+
+/* SOS: 5-second cancel window, GPS request, manual fallback */
+function SOS({ store, toast }) {
+  const [ph, setPh] = useState('idle'), [n, setN] = useState(5), [gps, setGps] = useState(null), [gErr, setGErr] = useState(''), [loc, setLoc] = useState(''), [res, setRes] = useState(null);
+  const g = useRef(null);
+  function start() {
+    setPh('count'); setN(5); setGps(null); g.current = null; setGErr('');
+    if (!navigator.geolocation) { setGErr('GPS is not available on this device.'); return; }
+    navigator.geolocation.getCurrentPosition(p => { g.current = { lat: p.coords.latitude, lng: p.coords.longitude }; setGps(g.current); },
+      e => setGErr(e.code === 1 ? 'Location permission was denied.' : 'Could not read GPS.'), { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 });
+  }
+  const cancel = () => { setPh('idle'); toast('SOS cancelled. Nothing was saved.'); };
+  useEffect(() => {
+    if (ph !== 'count') return;
+    if (n <= 0) { g.current ? send(g.current, '') : setPh('wait'); return; }
+    const id = setTimeout(() => setN(n - 1), 1000); return () => clearTimeout(id);
+  }, [ph, n]);
+  useEffect(() => { if (ph === 'wait' && gps) send(gps, loc); }, [ph, gps]);
+  useEffect(() => { if (ph === 'idle' || ph === 'done') return; const k = e => { if (e.key === 'Escape' && ph !== 'sending') cancel(); }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, [ph]);
+  async function send(c, text) {
+    setPh('sending');
+    const inc = makeIncident({ id: genId(), title: 'SOS alert', description: 'SOS button activated by the reporter.' + (text ? ' Manual location: ' + text : ''), category: 'other',
+      location: c ? c.lat.toFixed(5) + ', ' + c.lng.toFixed(5) : (text || 'Location not provided'), people: 1, lat: c ? c.lat : null, lng: c ? c.lng : null, sos: true, status: 'Reported', createdAt: Date.now(),
+      override: { level: 'Critical', score: 10, reasons: ['SOS button pressed: treated as Critical until staff review it', 'Location source: ' + (c ? 'GPS' : text ? 'typed by the reporter' : 'not provided')] } });
+    try { await store.create(inc); setRes(inc); setPh('done'); } catch (e) { toast('SOS could not be saved. Call 112 now.', 'err'); setPh('idle'); }
+  }
+  const live = res && ((store.items || []).find(i => i.id === res.id) || res);
+  return (
+    <section className="card p-6 grid justify-items-center gap-3 text-center" aria-label="SOS">
+      <button className="sosbtn" onClick={start} aria-label="SOS emergency button">SOS</button>
+      <p className="text-muted" style={{ maxWidth: 420 }}>{t('sos_hint')}</p>
+      <a href="tel:112" className="btn btn-ghost"><Icon name="phone" size={20} />{t('call112')}</a>
+      {ph !== 'idle' && (
+        <div className="overlay"><div className="dialog" role="alertdialog" aria-modal="true" aria-labelledby="sos-t">
+          {ph === 'count' && <>
+            <h2 id="sos-t" className="text-3xl font-bold" style={{ color: 'var(--red)' }}>{t('sos_count')} <span className="tnum">{n}</span></h2>
+            <p className="text-muted mt-1">{gps ? 'GPS location found.' : gErr ? gErr + ' You can type your location next.' : 'Getting your GPS location…'}</p>
+            <button className="btn btn-red btn-lg w-full mt-5" autoFocus onClick={cancel}><Icon name="x" size={24} />{t('cancel')}</button>
+          </>}
+          {ph === 'wait' && <>
+            <h2 id="sos-t" className="text-2xl font-bold">Where are you?</h2>
+            <p className="text-muted mt-1">{gErr || 'Waiting for GPS…'} Type your location, or send without it.</p>
+            <label htmlFor="sos-loc" className="label mt-4">Location (street, landmark, area)</label>
+            <input id="sos-loc" className="field" value={loc} onChange={e => setLoc(e.target.value)} autoFocus />
+            <div className="flex gap-3 mt-4 flex-wrap">
+              <button className="btn btn-ghost flex-1" onClick={cancel}>{t('cancel')}</button>
+              <button className="btn btn-red flex-1" onClick={() => send(g.current, loc.trim())}>Send SOS</button>
+            </div>
+          </>}
+          {ph === 'sending' && <h2 id="sos-t" className="text-2xl font-bold">Saving SOS…</h2>}
+          {ph === 'done' && live && <>
+            <h2 id="sos-t" className="text-2xl font-bold">SOS recorded</h2>
+            <div className="mono mt-2 break-all">{live.id}</div>
+            <div className="hint">{fmtDate(live.createdAt)}</div>
+            <div className="mt-3"><SyncNote id={live.id} store={store} /></div>
+            <a href="tel:112" className="btn btn-red w-full mt-4"><Icon name="phone" size={20} />{t('call112')}</a>
+            <button className="btn btn-ghost w-full mt-2" onClick={() => setPh('idle')}>Close</button>
+          </>}
+        </div></div>
+      )}
+    </section>
+  );
+}
+
+/* Voice / text assistant: Tamil + English, rule-based understanding, text fallback */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const RULES = [
+  ['fire', /தீ விபத்து|தீவிபத்து|தீப்பிடி|தீ பிடி|நெருப்பு|\bfire\b|smoke|burning|blaze/i],
+  ['collapse', /இடிந்து|collapse/i], ['flood', /வெள்ளம்|நீர் புகு|flood|waterlog/i],
+  ['disaster', /நிலநடுக்கம்|புயல்|நிலச்சரிவு|சுனாமி|earthquake|cyclone|landslide|tsunami|storm/i],
+  ['medical', /மருத்துவ|ஆம்புலன்ஸ்|மயக்க|மூச்சு|நெஞ்சு வலி|ரத்தம்|heart attack|unconscious|ambulance|medical|bleeding|not breathing|injur/i],
+  ['road', /சாலை விபத்து|வாகன விபத்து|மோதி|விபத்து|accident|crash|collision|overturned/i],
+  ['police', /போலீஸ்|காவல்|திருட்டு|கொள்ளை|தாக்க|police|theft|robbery|attack|assault|threat/i],
+];
+function parseSpeech(s) {
+  let category = ''; for (const [id, re] of RULES) if (re.test(s)) { category = id; break; }
+  let location = ''; const m = s.match(/\b(?:in|at|near|on)\s+((?:[A-Z][\w.'-]*\s?){1,4})/);
+  if (m) location = m[1].trim(); else { const low = s.toLowerCase(); for (const k in CITIES) if (low.includes(k)) { location = k; break; } }
+  const p = s.match(/(\d+)\s*(?:people|persons|பேர்)/i);
+  return { category, location, people: p ? p[1] : '' };
+}
+function speak(text, lang) { try { if (!window.speechSynthesis) return; speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = lang === 'ta' ? 'ta-IN' : 'en-IN'; speechSynthesis.speak(u); } catch (e) {} }
+function VoiceAssistant({ onParsed }) {
+  const [lang, setLang] = useState(LANG), [txt, setTxt] = useState(''), [on, setOn] = useState(false), [msg, setMsg] = useState('');
+  function analyze(text) {
+    const s = (text || '').trim(); if (!s) { setMsg(lang === 'ta' ? 'முதலில் ஏதாவது சொல்லவும் அல்லது தட்டச்சு செய்யவும்.' : 'Say or type something first.'); return; }
+    const p = parseSpeech(s), cat = CATEGORIES.find(c => c.id === p.category), patch = { description: s };
+    if (cat) { patch.category = cat.id; patch.title = cat.label + ' (voice report)'; } if (p.location) patch.location = p.location; if (p.people) patch.people = p.people;
+    onParsed(patch);
+    const say = lang === 'ta'
+      ? (cat ? 'புரிந்தது: ' + CAT_TA[cat.id] + '. ' : 'அவசரத்தின் வகை தெரியவில்லை. தேர்வு செய்யவும். ') + (p.location ? 'இடம்: ' + p.location + '. ' : 'இடம் கண்டறியப்படவில்லை. தயவுசெய்து சேர்க்கவும். ') + 'படிவத்தைச் சரிபார்த்து சமர்ப்பிக்கவும். இன்னும் எதுவும் அனுப்பப்படவில்லை.'
+      : (cat ? 'I understood: ' + cat.label + '. ' : 'I could not tell the type of emergency. Please choose one. ') + (p.location ? 'Location: ' + p.location + '. ' : 'I could not find a location. Please add it. ') + 'Review the form and press submit. Nothing has been sent yet.';
+    setMsg(say); speak(say, lang);
+  }
+  function listen() {
+    if (!SR) { setMsg('Voice input is not supported in this browser. Type below instead.'); return; }
+    const r = new SR(); r.lang = lang === 'ta' ? 'ta-IN' : 'en-IN'; r.interimResults = false;
+    r.onresult = e => { const s = e.results[0][0].transcript; setTxt(s); analyze(s); };
+    r.onerror = e => { setOn(false); setMsg(e.error === 'not-allowed' ? 'Microphone permission was denied. Type below instead.' : e.error === 'network' ? 'The speech service is not reachable. Type below instead.' : e.error === 'no-speech' ? 'No speech heard. Try again or type below.' : 'Voice input failed. Type below instead.'); };
+    r.onend = () => setOn(false);
+    try { setOn(true); setMsg(''); r.start(); } catch (e) { setOn(false); setMsg('Could not start the microphone. Type below instead.'); }
+  }
+  return (
+    <section className="card p-5 grid gap-3" aria-label={t('voice_h')}>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <h2 className="text-2xl font-bold">{t('voice_h')}</h2>
+        <div className="seg" role="group" aria-label="Voice language">
+          <button type="button" aria-pressed={lang === 'ta'} onClick={() => setLang('ta')}>தமிழ்</button>
+          <button type="button" aria-pressed={lang === 'en'} onClick={() => setLang('en')}>English</button>
+        </div>
+      </div>
+      <textarea className="field" rows={3} value={txt} onChange={e => setTxt(e.target.value)} aria-label="Describe the emergency"
+        placeholder={lang === 'ta' ? 'எ.கா: எங்க ஏரியாவில் தீ விபத்து ஏற்பட்டிருக்கு.' : 'e.g. There is a road accident near Velachery Chennai, 3 people hurt.'} />
+      <div className="flex gap-2 flex-wrap">
+        <button type="button" className="btn btn-navy" onClick={listen} disabled={on}><Icon name="phone" size={20} />{on ? t('listening') : t('speak')}</button>
+        <button type="button" className="btn btn-ghost" onClick={() => analyze(txt)}>{t('analyze')}</button>
+        <button type="button" className="btn btn-ghost" onClick={() => { setLang('ta'); setTxt('எங்க ஏரியாவில் தீ விபத்து ஏற்பட்டிருக்கு.'); }}>Tamil example</button>
+      </div>
+      {!SR && <p className="hint">Voice recognition is not available here (Chrome or Edge work best). The text box works everywhere.</p>}
+      {msg && <p role="status" className="font-medium">{msg}</p>}
+    </section>
+  );
+}
+
+/* Leaflet + OpenStreetMap. Demo data is always labelled. Route from OSRM when reachable. */
+function MapView({ incidents, teams, selInc, selTeam, h = 420 }) {
+  const el = useRef(null), map = useRef(null), layer = useRef(null), [info, setInfo] = useState('');
+  const ok = typeof L !== 'undefined';
+  useEffect(() => {
+    if (!ok || !el.current) return;
+    map.current = L.map(el.current).setView([11.1, 78.6], 7);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap contributors' }).addTo(map.current);
+    layer.current = L.layerGroup().addTo(map.current);
+    return () => { map.current.remove(); map.current = null; };
+  }, []);
+  useEffect(() => {
+    if (!map.current) return; layer.current.clearLayers(); const pts = [];
+    incidents.forEach(i => { const p = pos(i); if (!p) return; pts.push([p.lat, p.lng]);
+      L.circleMarker([p.lat, p.lng], { radius: i === selInc ? 13 : 9, color: '#fff', weight: 2, fillColor: SEVCOL[i.severity], fillOpacity: .95 })
+        .bindPopup('<b>' + esc(i.title) + '</b><br>' + esc(i.severity) + ' · ' + esc(i.status) + '<br>' + (i.demo ? '<b>DEMO DATA</b>: sample location, not a real GPS fix' : p.approx ? 'Approximate position from the place name' : 'GPS location from the report')).addTo(layer.current); });
+    teams.forEach(x => L.marker([x.lat, x.lng], { icon: L.divIcon({ className: '', iconSize: [28, 28], html: '<div class="tmk" style="background:' + TEAMCOL[x.status] + '">' + TEAM_LETTER[x.type] + '</div>' }) })
+      .bindPopup('<b>' + esc(x.name) + '</b><br>' + esc(TEAM_TYPES[x.type]) + ' · ' + esc(x.status) + (x.demo ? '<br><b>DEMO DATA</b>: sample team location' : '')).addTo(layer.current));
+    if (pts.length && !selInc) map.current.fitBounds(pts, { padding: [30, 30], maxZoom: 12 });
+  }, [incidents, teams, selInc]);
+  useEffect(() => {
+    setInfo(''); if (!map.current || !selInc || !selTeam) return;
+    const a = { lat: selTeam.lat, lng: selTeam.lng }, b = pos(selInc); if (!b) { setInfo('This incident has no usable location, so no route can be drawn.'); return; }
+    let dead = false; const rl = L.layerGroup().addTo(map.current), km = hav(a, b);
+    const straight = () => { if (dead) return; const l = L.polyline([[a.lat, a.lng], [b.lat, b.lng]], { color: '#2765F0', weight: 4, dashArray: '6 8' }).addTo(rl); map.current.fitBounds(l.getBounds(), { padding: [30, 30] }); setInfo('Road routing is unavailable. The dashed line is a straight-line distance of about ' + km.toFixed(1) + ' km, not a route.'); };
+    fetch('https://router.project-osrm.org/route/v1/driving/' + a.lng + ',' + a.lat + ';' + b.lng + ',' + b.lat + '?overview=full&geometries=geojson')
+      .then(r => r.json()).then(j => { if (dead) return; const r = j.routes && j.routes[0]; if (!r) return straight(); const l = L.geoJSON(r.geometry, { style: { color: '#2765F0', weight: 5 } }).addTo(rl); map.current.fitBounds(l.getBounds(), { padding: [30, 30] }); setInfo('Route: ' + (r.distance / 1000).toFixed(1) + ' km, about ' + Math.round(r.duration / 60) + ' min by road (estimate from the public OSRM demo server).'); })
+      .catch(straight);
+    return () => { dead = true; rl.remove(); };
+  }, [selInc && selInc.id, selTeam && selTeam.id]);
+  if (!ok) return <div className="card p-5"><b>The map library could not load.</b><p className="text-muted">Check your internet connection. Incident and team lists still work.</p></div>;
+  return (
+    <div className="grid gap-2">
+      <div ref={el} className="card" style={{ height: h, isolation: 'isolate', overflow: 'hidden' }} role="application" aria-label="Incident and team map" />
+      <p className="hint">Markers marked DEMO are sample locations, not real-time GPS. Circles are incidents (colour = priority). Squares are teams (green available, orange busy, grey offline). Map tiles need internet.</p>
+      {info && <p role="status" className="font-medium">{info}</p>}
+    </div>
+  );
+}
+
+function IncidentOps({ inc, store, toast }) {
+  const rec = useMemo(() => recommend(inc, store.teams), [inc, store.teams]);
+  const [pick, setPick] = useState(null);
+  const sel = rec.find(x => x.id === pick) || rec[0] || null, assigned = store.teams.find(x => x.id === inc.teamId);
+  async function assign() {
+    try { await store.assign(inc.id, sel.id); toast(store.mode === 'server' ? 'Assignment recorded on the server.' : 'DEMO assignment saved in this browser only. No real team was contacted.'); }
+    catch (e) { toast(e.status === 403 ? 'Only admins can assign teams.' : 'Assignment failed. Try again.', 'err'); }
+  }
+  return (
+    <div className="grid gap-5 mt-5">
+      <section className="card p-5 grid gap-3">
+        <h2 className="text-2xl font-bold">Recommended team</h2>
+        {assigned && <div className="rounded-xl p-3 st-progress font-semibold">Assignment recorded: {assigned.name}{assigned.demo ? ' (DEMO team)' : ''}</div>}
+        {rec.length === 0 ? <p className="text-muted">No available team of a suitable type was found. Check team status or call 112.</p> : (
+          <div className="grid gap-2" role="radiogroup" aria-label="Suggested teams">
+            {rec.slice(0, 3).map((x, i) => (
+              <button key={x.id} type="button" role="radio" aria-checked={sel && sel.id === x.id} className="catcard" style={{ flexDirection: 'row', justifyContent: 'space-between', minHeight: 64, textAlign: 'left' }} onClick={() => setPick(x.id)}>
+                <span><b>{i === 0 ? 'Nearest suitable: ' : ''}{x.name}</b> {x.demo && <span className="badge st-reported">DEMO</span>}<br /><span className="hint">{TEAM_TYPES[x.type]}</span></span>
+                <span className="tnum font-bold">{x.km == null ? 'distance unknown' : x.km.toFixed(1) + ' km'}</span>
+              </button>))}
+          </div>)}
+        {store.can('assign') && sel && inc.status !== 'Resolved' && <button className="btn btn-navy" onClick={assign}>Record assignment to {sel.name}</button>}
+        {!store.can('assign') && <p className="hint">Only admins can record assignments.</p>}
+        <p className="hint">This is a recommendation, not a dispatch. {store.mode === 'server' ? 'Staff must contact the team through their normal channel; this app has no radio or CAD integration.' : 'DEMO MODE: no real team is ever contacted.'}</p>
+      </section>
+      <section className="card p-5 grid gap-3"><h2 className="text-2xl font-bold">Location and route</h2>
+        <MapView incidents={[inc]} teams={store.teams} selInc={inc} selTeam={sel || assigned} h={320} /></section>
+      <section className="card p-5 grid gap-3"><h2 className="text-2xl font-bold">History</h2>
+        <ol className="grid gap-3">{(inc.history || []).slice().reverse().map((x, i) => (
+          <li key={i} className="flex gap-3 flex-wrap items-baseline"><StatusBadge status={x.status} /><span className="tnum text-sm text-muted">{fmtDate(x.at)}</span><span className="text-sm">{x.note} · {x.by}</span></li>))}</ol></section>
+    </div>
+  );
+}
+
+function Analytics({ items, teams, mode }) {
+  const a = items || [], tot = a.length || 1, C = 2 * Math.PI * 52; let off = 0;
+  const pr = ['Critical', 'High', 'Medium', 'Low'].map(l => ({ l, n: a.filter(i => i.severity === l).length }));
+  const stt = STATUSES.map(s => ({ s, n: a.filter(i => i.status === s).length }));
+  return (
+    <section className="grid gap-4" aria-label="Analytics">
+      {mode === 'demo' && <div className="sev-medium text-sm font-semibold" style={{ padding: '8px 12px', borderRadius: 10 }}>DEMO DATA: charts count the sample incidents plus any reports saved in this browser.</div>}
+      <div className="two">
+        <div className="card p-5 grid gap-3"><h2 className="text-2xl font-bold">Priority distribution</h2>
+          <div className="flex items-center gap-5 flex-wrap">
+            <svg width="140" height="140" viewBox="0 0 140 140" role="img" aria-label={'Priority: ' + pr.map(p => p.l + ' ' + p.n).join(', ')}>
+              <circle cx="70" cy="70" r="52" fill="none" style={{ stroke: 'var(--surface2)' }} strokeWidth="22" />
+              {pr.map(p => { const len = p.n / tot * C, e = <circle key={p.l} cx="70" cy="70" r="52" fill="none" style={{ stroke: 'var(--c-' + p.l.toLowerCase() + ')' }} strokeWidth="22" strokeDasharray={len + ' ' + (C - len)} strokeDashoffset={-off} transform="rotate(-90 70 70)" />; off += len; return e; })}
+              <text x="70" y="76" textAnchor="middle" className="font-display" style={{ fill: 'var(--fg)', fontSize: 26, fontWeight: 700 }}>{a.length}</text>
+            </svg>
+            <ul className="grid gap-1">{pr.map(p => <li key={p.l} className="flex items-center gap-2"><SevBadge level={p.l} /><b className="tnum">{p.n}</b></li>)}</ul>
+          </div></div>
+        <div className="card p-5 grid gap-3"><h2 className="text-2xl font-bold">Status</h2>
+          {stt.map(x => <div key={x.s} className="grid items-center gap-3" style={{ gridTemplateColumns: '110px minmax(0,1fr) 28px' }}><span className="text-sm font-semibold">{x.s}</span><div className="bar"><span style={{ width: (x.n / tot * 100) + '%' }} /></div><b className="tnum text-right">{x.n}</b></div>)}</div>
+      </div>
+      <div className="card p-5 grid gap-3"><h2 className="text-2xl font-bold">Team availability</h2>
+        {Object.keys(TEAM_TYPES).map(k => { const l = teams.filter(x => x.type === k); return (
+          <div key={k} className="grid items-center gap-3" style={{ gridTemplateColumns: '130px minmax(0,1fr)' }}>
+            <span className="text-sm font-semibold">{TEAM_TYPES[k]}</span>
+            <div className="flex gap-1 flex-wrap">{l.length === 0 ? <span className="hint">none</span> : l.map(x => <span key={x.id} title={x.name + ': ' + x.status} className={'badge ' + TS[x.status]}>{x.status}</span>)}</div>
+          </div>); })}</div>
+    </section>
+  );
+}
+
+function TeamsPage({ store, toast }) {
+  const set = async (tm, s) => { try { await store.setTeamStatus(tm.id, s); toast(tm.name + ': ' + s); } catch (e) { toast(e.status === 403 ? 'You can only change your own team.' : 'Could not update the team.', 'err'); } };
+  return (
+    <div className="grid gap-5">
+      <div><h1 className="text-4xl font-bold">{t('teams')}</h1><p className="text-muted mt-1">{store.mode === 'demo' ? 'DEMO DATA: sample teams. Status changes are saved in this browser only.' : 'Team status from the server.'}</p></div>
+      {Object.keys(TEAM_TYPES).map(k => { const list = store.teams.filter(x => x.type === k); return (
+        <section key={k} className="grid gap-3"><h2 className="text-2xl font-bold">{TEAM_TYPES[k]} <span className="hint font-normal">({list.filter(x => x.status === 'Available').length}/{list.length} available)</span></h2>
+          <div className="grid gap-3 md:grid-cols-2">{list.map(tm => (
+            <div key={tm.id} className="card p-4 grid gap-2">
+              <div className="flex items-center gap-2 flex-wrap"><b>{tm.name}</b>{tm.demo && <span className="badge st-reported">DEMO</span>}<span className={'badge ml-auto ' + TS[tm.status]}><i />{tm.status}</span></div>
+              <select className="field" value={tm.status} onChange={e => set(tm, e.target.value)} aria-label={'Status of ' + tm.name}>{['Available', 'Busy', 'Offline'].map(s => <option key={s}>{s}</option>)}</select>
+            </div>))}</div></section>); })}
+    </div>
+  );
+}
+function MapPage({ store }) {
+  const [iid, setI] = useState(''), [tid, setT] = useState('');
+  const inc = (store.items || []).find(i => i.id === iid), tm = store.teams.find(x => x.id === tid);
+  return (
+    <div className="grid gap-4">
+      <div><h1 className="text-4xl font-bold">Map and routes</h1><p className="text-muted mt-1">Pick an incident and a team to draw a route.</p></div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <select className="field" value={iid} onChange={e => setI(e.target.value)} aria-label="Incident"><option value="">Select incident</option>{(store.items || []).map(i => <option key={i.id} value={i.id}>{i.severity} · {i.title}</option>)}</select>
+        <select className="field" value={tid} onChange={e => setT(e.target.value)} aria-label="Team"><option value="">Select team</option>{store.teams.map(x => <option key={x.id} value={x.id}>{x.name} ({x.status})</option>)}</select>
+      </div>
+      <MapView incidents={store.items || []} teams={store.teams} selInc={inc} selTeam={tm} h={480} />
+    </div>
+  );
+}
+
+function Login({ store, toast }) {
+  const [email, setEmail] = useState(''), [pw, setPw] = useState(''), [err, setErr] = useState(''), [busy, setBusy] = useState(false);
+  async function go(e) {
+    e.preventDefault(); setBusy(true); setErr('');
+    try { await store.login(email, pw); toast('Signed in.'); } catch (x) { setErr(x.name === 'AbortError' ? 'The server did not respond. Check your connection.' : x.message || 'Sign in failed.'); }
+    setBusy(false);
+  }
+  return (
+    <form onSubmit={go} className="card p-6 md:p-8 grid gap-4 max-w-md mx-auto w-full mt-4" noValidate>
+      <div className="w-14 h-14 rounded-2xl grid place-items-center" style={{ background: 'var(--navy2)', color: '#fff' }}><Icon name="lock" size={28} /></div>
+      <div><h1 className="text-3xl font-bold">Staff sign in</h1><p className="text-muted">Admins and responders only. Reporting does not need an account.</p></div>
+      <Field id="f-email" label="Email"><input id="f-email" type="email" className="field" value={email} onChange={e => setEmail(e.target.value)} autoComplete="username" /></Field>
+      <Field id="f-pw" label="Password" error={err}><input id="f-pw" type="password" className={'field' + (err ? ' bad' : '')} value={pw} onChange={e => { setPw(e.target.value); setErr(''); }} autoComplete="current-password" /></Field>
+      <button className="btn btn-red" type="submit" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
+      {store.mode === 'demo' && <div className="rounded-xl p-3 text-sm grid gap-2" style={{ background: 'var(--surface2)' }}><b>DEMO accounts (no backend, not secure)</b>
+        {DEMO_ACCOUNTS.map(a => <button key={a.email} type="button" className="btn btn-ghost" style={{ minHeight: 40 }} onClick={() => { setEmail(a.email); setPw(a.password); }}>{a.role}: {a.email}</button>)}</div>}
+      {store.mode === 'connecting' && <p className="hint">Connecting to the server…</p>}
+    </form>
+  );
+}
+
+/* ---------- app ---------- */
+function App() {
+  const store = useStore();
+  const route = useHashRoute();
+  const [lang, setLang] = useState(() => { try { return localStorage.getItem('resq.lang') || 'en'; } catch (e) { return 'en'; } });
+  LANG = lang;
+  const [toasts, setToasts] = useState([]);
+  const toast = useCallback((msg, type) => {
+    const id = Math.random();
+    setToasts(x => [...x, { id, msg, type }]);
+    setTimeout(() => setToasts(x => x.filter(y => y.id !== id)), 4800);
+  }, []);
+  useEffect(() => {
+    try { const th = localStorage.getItem('resq.theme'); if (th) document.documentElement.setAttribute('data-theme', th); } catch (e) {}
+    const f = () => setLang(l => { const n = l === 'en' ? 'ta' : 'en'; try { localStorage.setItem('resq.lang', n); } catch (e) {} document.documentElement.lang = n; return n; });
+    window.addEventListener('resq-lang', f); return () => window.removeEventListener('resq-lang', f);
+  }, []);
+  const logout = () => { store.logout(); location.hash = 'home'; toast('Signed out.'); };
+  const staff = route === 'admin' || route === 'map' || route === 'teams' || route.startsWith('incident-');
+  let page;
+  if (route.startsWith('report')) page = <ReportForm key={route} store={store} toast={toast} initialCat={route.startsWith('report-') ? route.slice(7) : ''} />;
+  else if (staff) page = !store.user ? <Login store={store} toast={toast} />
+    : route === 'map' ? <MapPage store={store} /> : route === 'teams' ? <TeamsPage store={store} toast={toast} />
+    : route === 'admin' ? <Admin store={store} /> : <Detail id={route.slice(9)} store={store} toast={toast} />;
+  else page = <Home store={store} toast={toast} />;
+  return (
+    <React.Fragment key={lang}>
+      <Header />
+      <DemoBanner mode={store.mode} online={store.online} />
+      <div className="shell gutter">
+        <Sidebar route={route} admin={!!store.user} onLogout={logout} />
+        <main className="min-w-0">
+          {store.user && staff && <div className="hint mb-3">Signed in as {store.user.email} · <b>{store.user.role}</b>{store.user.demo ? ' (DEMO account)' : ''}</div>}
+          {page}
+          {store.user && staff && <div className="mt-8 md:hidden"><button className="btn btn-ghost w-full" onClick={logout}><Icon name="logout" size={20} />Sign out</button></div>}
+        </main>
+      </div>
+      <BottomNav route={route} />
+      <Toasts list={toasts} />
+    </React.Fragment>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+
+</body></html>
